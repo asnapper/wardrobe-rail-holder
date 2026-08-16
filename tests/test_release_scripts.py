@@ -1,4 +1,5 @@
 import os
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -121,6 +122,14 @@ class ReleaseModelBuildTests(unittest.TestCase):
                     self.assertEqual(components, expected_components)
                     self.assertGreaterEqual(lower[2], 0.0)
 
+            for filename in (
+                "wardrobe_rail_bracket_main.3mf",
+                "wardrobe_rail_bracket_cap.3mf",
+                "wardrobe_rail_bracket_complete.3mf",
+            ):
+                with self.subTest(filename=filename, contract="neutral archive"):
+                    self.assert_clean_3mf(output_directory / filename)
+
     def test_complete_model_is_neutral_two_volume_print_layout(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_directory = Path(temporary_directory)
@@ -133,17 +142,32 @@ class ReleaseModelBuildTests(unittest.TestCase):
             self.assertEqual(components, 2)
             self.assertGreaterEqual(lower[2], 0.0)
 
-            with zipfile.ZipFile(complete) as archive:
-                names = archive.namelist()
-            self.assertFalse(any(name.endswith(".gcode") for name in names))
-            self.assertFalse(
-                {
-                    "Metadata/project_settings.config",
-                    "Metadata/model_settings.config",
-                    "Metadata/slice_info.config",
-                }
-                & set(names)
+            self.assert_clean_3mf(complete)
+
+    def test_builds_with_no_display_server(self):
+        openscad = shutil.which("openscad")
+        self.assertIsNotNone(openscad, "OpenSCAD CLI is not installed")
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            wrapper = temporary_path / "headless-openscad"
+            wrapper.write_text(
+                "#!/usr/bin/env sh\n"
+                "[ -z \"${DISPLAY-}\" ] || exit 61\n"
+                "[ -z \"${WAYLAND_DISPLAY-}\" ] || exit 62\n"
+                "[ \"${QT_QPA_PLATFORM-}\" = offscreen ] || exit 63\n"
+                f"exec {openscad} \"$@\"\n",
+                encoding="utf-8",
             )
+            wrapper.chmod(0o755)
+            environment = os.environ | {"OPENSCAD_BIN": str(wrapper)}
+            environment.pop("DISPLAY", None)
+            environment.pop("WAYLAND_DISPLAY", None)
+            environment.pop("QT_QPA_PLATFORM", None)
+
+            result = self.run_builder(temporary_path / "models", environment)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_missing_openscad_leaves_output_directory_unchanged(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -158,6 +182,19 @@ class ReleaseModelBuildTests(unittest.TestCase):
             self.assertIn("https://openscad.org/downloads.html", result.stderr)
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "do not touch")
             self.assertFalse(RELEASE_FILENAMES & {path.name for path in output_directory.iterdir()})
+
+    def assert_clean_3mf(self, output: Path):
+        with zipfile.ZipFile(output) as archive:
+            names = archive.namelist()
+        self.assertFalse(any(name.endswith(".gcode") for name in names))
+        self.assertFalse(
+            {
+                "Metadata/project_settings.config",
+                "Metadata/model_settings.config",
+                "Metadata/slice_info.config",
+            }
+            & set(names)
+        )
 
 
 if __name__ == "__main__":

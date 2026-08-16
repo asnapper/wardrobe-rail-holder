@@ -29,13 +29,15 @@ trap 'rm -rf "$BUILD_DIRECTORY"' EXIT HUP INT TERM
 
 export_stl() {
     mode=$1 output=$2
-    "$OPENSCAD" --export-format binstl -o "$output" -D "part=\"$mode\"" "$MODEL"
+    QT_QPA_PLATFORM=offscreen "$OPENSCAD" --export-format binstl \
+        -o "$output" -D "part=\"$mode\"" "$MODEL"
     require_nonempty "$output"
 }
 
 export_3mf() {
     mode=$1 output=$2
-    "$OPENSCAD" --export-format 3mf -o "$output" -D "part=\"$mode\"" "$MODEL"
+    QT_QPA_PLATFORM=offscreen "$OPENSCAD" --export-format 3mf \
+        -o "$output" -D "part=\"$mode\"" "$MODEL"
     require_nonempty "$output"
 }
 
