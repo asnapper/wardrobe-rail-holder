@@ -5,17 +5,33 @@ die() {
     exit 1
 }
 
+absolute_tool_path() {
+    tool_path=$1
+    case "$tool_path" in
+        /*)
+            printf '%s\n' "$tool_path"
+            ;;
+        *)
+            tool_directory=$(dirname -- "$tool_path")
+            tool_name=$(basename -- "$tool_path")
+            absolute_tool_directory=$(CDPATH= cd -- "$tool_directory" && pwd) \
+                || return 1
+            printf '%s/%s\n' "$absolute_tool_directory" "$tool_name"
+            ;;
+    esac
+}
+
 find_required_tool() {
     override=$1 label=$2 url=$3
     shift 3
     if [ -n "$override" ]; then
         [ -x "$override" ] || die "$label executable not found: $override\nInstall: $url"
-        printf '%s\n' "$override"
+        absolute_tool_path "$override"
         return
     fi
     for candidate do
         if command -v "$candidate" >/dev/null 2>&1; then
-            command -v "$candidate"
+            absolute_tool_path "$(command -v "$candidate")"
             return
         fi
     done

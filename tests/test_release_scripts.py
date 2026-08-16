@@ -524,6 +524,48 @@ class P1SBuildTests(unittest.TestCase):
             self.assertNotEqual(probe_directory, ROOT)
             self.assertTrue(probe_directory.name.startswith("wardrobe-rail-holder."))
 
+    def test_relative_orcaslicer_override_survives_private_version_probe(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            openscad = temporary_path / "openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'stl')\n",
+            )
+            orca = temporary_path / "relative-orca"
+            self.make_executable(
+                orca,
+                "#!/usr/bin/env python3\n"
+                "import json, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "if args == ['--help']:\n"
+                "    print('OrcaSlicer-2.4.2:')\n"
+                "    raise SystemExit(0)\n"
+                "output_directory = pathlib.Path(\n"
+                "    args[args.index('--outputdir') + 1]\n"
+                ")\n"
+                "archive_name = args[args.index('--export-3mf') + 1]\n"
+                "(output_directory / archive_name).write_bytes(b'slice')\n"
+                "(output_directory / 'result.json').write_text(\n"
+                "    json.dumps({'return_code': 0}), encoding='utf-8'\n"
+                ")\n",
+            )
+            relative_orca = os.path.relpath(orca, Path.cwd())
+            self.assertFalse(Path(relative_orca).is_absolute())
+            output = temporary_path / "release.gcode.3mf"
+            environment = os.environ | {
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": relative_orca,
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output.read_bytes(), b"slice")
+
     def test_slice_must_write_a_fresh_result_json(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
