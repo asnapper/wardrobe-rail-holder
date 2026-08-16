@@ -4,7 +4,7 @@ Parametric OpenSCAD model for mounting a vertical 30 × 15 mm rounded-rectangle
 wardrobe rail to a ceiling. The rail has 7 mm corner radii and is captured by a
 removable lower cap.
 
-![Bracket arrangement](docs/bracket-arrangement.svg)
+![Rendered wardrobe rail bracket](docs/bracket-render.png)
 
 ## Hardware for one bracket
 
