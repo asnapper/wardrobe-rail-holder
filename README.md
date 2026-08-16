@@ -16,26 +16,65 @@ removable lower cap.
 Do not select ceiling anchors by screw size alone. Plasterboard, masonry,
 concrete, timber, and suspended ceilings require different fastening methods.
 
-## Ready-to-print Bambu P1S project
+## Release files
 
-[`dist/wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf`](dist/wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf)
-is sliced for **two complete brackets** on a Bambu Lab P1S with a 0.4 mm
-nozzle, Textured PEI Plate, and Bambu PLA Basic. It was produced with Bambu
-Studio 2.7.1.62 and contains the models, project settings, preview, and printer
-toolpaths.
+| File | Contents and intended use |
+| --- | --- |
+| [`dist/models/wardrobe_rail_bracket_main.stl`](dist/models/wardrobe_rail_bracket_main.stl) | Main body in its recommended print orientation; use with any slicer. |
+| [`dist/models/wardrobe_rail_bracket_cap.stl`](dist/models/wardrobe_rail_bracket_cap.stl) | Cap in its recommended print orientation; use with any slicer. |
+| [`dist/models/wardrobe_rail_bracket_main.3mf`](dist/models/wardrobe_rail_bracket_main.3mf) | Neutral, portable 3MF containing the main body only. |
+| [`dist/models/wardrobe_rail_bracket_cap.3mf`](dist/models/wardrobe_rail_bracket_cap.3mf) | Neutral, portable 3MF containing the cap only. |
+| [`dist/models/wardrobe_rail_bracket_complete.3mf`](dist/models/wardrobe_rail_bracket_complete.3mf) | Neutral, portable print layout containing one main body and one cap. |
+| [`dist/wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf`](dist/wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf) | Ready-to-print Bambu Lab P1S project for two complete brackets, with models, project settings, and printer toolpaths. |
 
-The embedded profile uses 0.20 mm layers, 5 walls, 6 top and bottom layers,
-40% gyroid infill, a 5 mm outer brim with a 0.1 mm gap, and no supports. The
-official slicer reports 150 layers, approximately 128.97 g of filament, and an
-estimated print time of 5 h 27 min. Review the selected filament and build plate
-in Bambu Studio before sending it to the printer.
+The P1S project was sliced with OrcaSlicer 2.4.2 for a P1S with a 0.4 mm
+nozzle, Textured PEI Plate, and Bambu PLA Basic. It contains four objects: two
+main bodies and two caps. Its embedded profile uses 0.20 mm layers, 5 walls, 6
+top and bottom layers, 40% gyroid infill, a 5 mm outer brim with a 0.1 mm gap,
+and no supports. OrcaSlicer reports 150 layers, 133.09 g of filament, and
+17,452 s (about 4 h 51 min) estimated print time.
 
-Bambu Studio records its standard enclosed-printer PLA advisory because the
-stock Textured PEI profile uses a 55 °C bed. For this long PLA print, open the
-P1S front door and/or remove the upper glass so chamber heat does not soften the
-filament and cause an extruder clog. The advisory is intentionally retained;
-the material heat limit and official bed temperature have not been falsified to
-hide it.
+The headless P1S build is intended to reproduce the project settings and
+toolpaths; embedded thumbnails are not guaranteed. Review the selected filament
+and build plate in OrcaSlicer before sending it to the printer.
+
+OrcaSlicer retains its standard enclosed-printer PLA advisory because the stock
+Textured PEI profile uses a 55 °C bed. For this long PLA print, open the P1S
+front door and/or remove the upper glass so chamber heat does not soften the
+filament and cause an extruder clog. The advisory is intentionally retained; the
+material heat limit and official bed temperature have not been falsified to hide
+it.
+
+## Reproducing release assets
+
+Install [OpenSCAD](https://openscad.org/downloads.html) and
+[OrcaSlicer 2.4 or later](https://github.com/OrcaSlicer/OrcaSlicer/releases).
+[`xvfb-run`](https://packages.ubuntu.com/search?keywords=xvfb) is optional and
+is needed only to regenerate the rendered PNG on a headless machine.
+
+Run the individual builders from the repository root:
+
+```bash
+./scripts/build-models.sh  # neutral STL and 3MF files in dist/models
+./scripts/build-p1s.sh     # sliced P1S .gcode.3mf in dist
+./scripts/build-render.sh  # docs/bracket-render.png; requires Xvfb
+./scripts/build-all.sh     # models and P1S project; render when Xvfb is available
+```
+
+The builders locate `openscad`, `orca-slicer` (also `orcaslicer` or
+`OrcaSlicer`), and `xvfb-run` on `PATH`. Set `OPENSCAD_BIN`, `ORCASLICER_BIN`,
+or `XVFB_RUN_BIN` to executable paths to override those selections, for example:
+
+```bash
+OPENSCAD_BIN=/opt/OpenSCAD/openscad ./scripts/build-models.sh
+ORCASLICER_BIN=/opt/OrcaSlicer/orca-slicer ./scripts/build-p1s.sh
+XVFB_RUN_BIN=/usr/bin/xvfb-run ./scripts/build-render.sh
+```
+
+`build-models.sh` accepts `--output-dir DIR`; `build-p1s.sh` and
+`build-render.sh` accept `--output FILE`. `build-all.sh` has no arguments. If
+Xvfb is unavailable, `build-all.sh` warns and keeps the existing render rather
+than replacing it.
 
 ## Exporting the parts
 
@@ -100,11 +139,12 @@ visible gap after tightening is normal.
 
 ## Safety and loading
 
-The geometry is deliberately substantial and targets a 20 kg static load per
-bracket, but it is **not structurally certified**. Capacity depends on filament
-quality and age, print temperature, layer adhesion, bracket spacing, rail span,
-ambient heat, ceiling construction, screws, and anchors. PLA also creeps under
-sustained load.
+This M6 revision has **not yet been physically printed or verified** for fit,
+function, or load. A 20 kg static load is a design target only, not a validated
+capacity or safety claim. It is **not structurally certified**. Capacity depends
+on filament quality and age, print temperature, layer adhesion, bracket spacing,
+rail span, ambient heat, ceiling construction, screws, and anchors. PLA also
+creeps under sustained load.
 
 Use multiple brackets, keep people clear during testing, and proof-load the
 installed rail gradually with a non-fragile load before hanging clothes. Inspect
