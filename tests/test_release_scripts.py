@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD_MODELS = ROOT / "scripts" / "build-models.sh"
 BUILD_P1S = ROOT / "scripts" / "build-p1s.sh"
 BUILD_RENDER = ROOT / "scripts" / "build-render.sh"
+BUILD_ALL = ROOT / "scripts" / "build-all.sh"
 
 EXPECTED = {
     "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 30.0), 1),
@@ -53,6 +54,69 @@ class RenderBuildTests(unittest.TestCase):
                 result.stderr,
             )
             self.assertEqual(output.read_bytes(), sentinel)
+
+
+class AggregateBuildTests(unittest.TestCase):
+    def make_executable(self, path: Path, contents: str):
+        path.write_text(contents, encoding="utf-8")
+        path.chmod(0o755)
+
+    def test_invalid_explicit_xvfb_skips_render_even_when_path_has_xvfb(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            scripts = temporary_path / "scripts"
+            scripts.mkdir()
+            build_all = scripts / "build-all.sh"
+            shutil.copy2(BUILD_ALL, build_all)
+            build_all.chmod(0o755)
+
+            events = temporary_path / "events.txt"
+            image = temporary_path / "bracket-render.png"
+            sentinel = b"existing render\x00\xff"
+            image.write_bytes(sentinel)
+            fake_bin = temporary_path / "bin"
+            fake_bin.mkdir()
+            self.make_executable(
+                scripts / "build-models.sh",
+                "#!/bin/sh\nprintf '%s\\n' models >> \"$EVENT_LOG\"\n",
+            )
+            self.make_executable(
+                scripts / "build-p1s.sh",
+                "#!/bin/sh\nprintf '%s\\n' p1s >> \"$EVENT_LOG\"\n",
+            )
+            self.make_executable(
+                scripts / "build-render.sh",
+                "#!/bin/sh\n"
+                "printf '%s\\n' render >> \"$EVENT_LOG\"\n"
+                ">\"$IMAGE_PATH\"\n",
+            )
+            self.make_executable(
+                fake_bin / "xvfb-run",
+                "#!/bin/sh\nexit 91\n",
+            )
+
+            environment = os.environ | {
+                "EVENT_LOG": str(events),
+                "IMAGE_PATH": str(image),
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "XVFB_RUN_BIN": "/definitely/missing/xvfb-run",
+            }
+            result = subprocess.run(
+                [str(build_all)],
+                text=True,
+                capture_output=True,
+                env=environment,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                events.read_text(encoding="utf-8").splitlines(), ["models", "p1s"]
+            )
+            self.assertEqual(
+                result.stderr,
+                "warning: Xvfb not found; keeping existing render\n",
+            )
+            self.assertEqual(image.read_bytes(), sentinel)
 
 
 def binary_stl_triangles(path: Path):

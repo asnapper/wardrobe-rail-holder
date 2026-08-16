@@ -85,3 +85,38 @@ and remains 1200 × 900.
 
 No SCAD source, profiles, neutral model exports, or sliced P1S artifact were
 changed.
+
+## Fix round 1: explicit Xvfb override precedence
+
+### RED evidence
+
+Added `AggregateBuildTests.test_invalid_explicit_xvfb_skips_render_even_when_path_has_xvfb`.
+The isolated test copies `build-all.sh`, supplies fake model/P1S/render entry
+points, places an executable fake `xvfb-run` on `PATH`, and sets
+`XVFB_RUN_BIN=/definitely/missing/xvfb-run`. Against the previous aggregate
+predicate, the focused test failed because the event log showed:
+
+```text
+['models', 'p1s', 'render']
+```
+
+This demonstrated that the invalid explicit override incorrectly fell through
+to the PATH candidate and invoked rendering.
+
+### GREEN evidence
+
+`build-all.sh` now treats an explicitly set `XVFB_RUN_BIN` as authoritative:
+only an executable override enables rendering; PATH lookup is used only when
+the override is unset. The focused aggregate test and the direct-render strict
+dependency test both pass:
+
+```text
+python3 -m unittest \
+  tests.test_release_scripts.AggregateBuildTests.test_invalid_explicit_xvfb_skips_render_even_when_path_has_xvfb \
+  tests.test_release_scripts.RenderBuildTests.test_missing_xvfb_preserves_render_destination -v
+Ran 2 tests ... OK
+```
+
+The aggregate regression verifies mandatory builders run first, rendering is
+not invoked, the exact warning is emitted, status is zero, and the existing
+render sentinel remains byte-for-byte unchanged.
