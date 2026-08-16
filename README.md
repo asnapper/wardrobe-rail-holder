@@ -16,14 +16,35 @@ removable lower cap.
 Do not select ceiling anchors by screw size alone. Plasterboard, masonry,
 concrete, timber, and suspended ceilings require different fastening methods.
 
+## Ready-to-print Bambu P1S project
+
+[`dist/wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf`](dist/wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf)
+is sliced for **two complete brackets** on a Bambu Lab P1S with a 0.4 mm
+nozzle, Textured PEI Plate, and Bambu PLA Basic. It was produced with Bambu
+Studio 2.7.1.62 and contains the models, project settings, preview, and printer
+toolpaths.
+
+The embedded profile uses 0.20 mm layers, 5 walls, 6 top and bottom layers,
+40% gyroid infill, a 5 mm outer brim with a 0.1 mm gap, and no supports. The
+official slicer reports 150 layers, approximately 115.66 g of filament, and an
+estimated print time of 5 h 03 min. Review the selected filament and build plate
+in Bambu Studio before sending it to the printer.
+
+Bambu Studio records its standard enclosed-printer PLA advisory because the
+stock Textured PEI profile uses a 55 °C bed. For this long PLA print, open the
+P1S front door and/or remove the upper glass so chamber heat does not soften the
+filament and cause an extruder clog. The advisory is intentionally retained;
+the material heat limit and official bed temperature have not been falsified to
+hide it.
+
 ## Exporting the parts
 
 Open `wardrobe_rail_bracket.scad` in OpenSCAD and set `part` near the top of the
 file:
 
 ```scad
-part = "main"; // export the ceiling plate and upper saddle
-part = "cap";  // export the removable lower cap
+part = "main_print"; // main part in its recommended print orientation
+part = "cap_print";  // cap in its recommended print orientation
 ```
 
 The default `part = "print"` places both pieces on the build plate in their
@@ -33,9 +54,12 @@ OpenSCAD preview also displays a translucent reference rail.
 Command-line export is supported:
 
 ```bash
-openscad -o wardrobe-bracket-main.stl -D 'part="main"' wardrobe_rail_bracket.scad
-openscad -o wardrobe-bracket-cap.stl -D 'part="cap"' wardrobe_rail_bracket.scad
+openscad -o wardrobe-bracket-main.stl -D 'part="main_print"' wardrobe_rail_bracket.scad
+openscad -o wardrobe-bracket-cap.stl -D 'part="cap_print"' wardrobe_rail_bracket.scad
 ```
+
+The `main` and `cap` modes retain the installed assembly coordinates and are
+useful for CAD inspection rather than direct slicing.
 
 All principal dimensions are top-level parameters. The default rail socket is
 30.6 × 15.6 mm with a 7.3 mm radius, providing 0.3 mm nominal clearance on each
@@ -96,5 +120,6 @@ python3 -m unittest discover -s tests -v
 ```
 
 The tests compile every output mode with OpenSCAD, inspect the binary STL
-envelopes, exercise custom rail dimensions, and verify invalid geometry is
-rejected.
+envelopes and screw-access paths, exercise custom rail dimensions, verify
+invalid geometry is rejected, and validate the embedded P1S settings and G-code
+checksum in the ready-to-print project.

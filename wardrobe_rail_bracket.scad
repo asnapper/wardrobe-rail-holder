@@ -5,7 +5,8 @@
  *   X: across the rail, Y: along the rail, Z: upward toward the ceiling.
  *   The ceiling-contact face is Z = 0 and the bracket hangs below it.
  *
- * Set `part` to "main" or "cap" before exporting an individual STL.
+ * Set `part` to "main_print" or "cap_print" for a directly sliceable STL.
+ * The "main" and "cap" modes retain installed assembly coordinates.
  * The default "print" layout places both parts on the build plate.
  */
 
@@ -65,8 +66,13 @@ nut_pocket_height = m4_nut_thickness + nut_clearance;
 nut_center_z = split_z + wall_thickness + nut_pocket_height / 2;
 main_lug_top_z = nut_center_z + nut_pocket_height / 2 + wall_thickness;
 boss_support_height = -plate_thickness - main_lug_top_z;
+boss_support_min_radius =
+    (clamp_bolt_diameter + clamp_bolt_clearance) / 2 + wall_thickness / 2;
 boss_support_top_radius =
-    bolt_lug_radius - boss_support_height * tan(print_support_angle);
+    max(
+        boss_support_min_radius,
+        bolt_lug_radius - boss_support_height * tan(print_support_angle)
+    );
 ceiling_countersink_depth =
     (ceiling_screw_head_diameter - ceiling_screw_diameter)
     / (2 * tan(ceiling_screw_angle / 2));
@@ -156,7 +162,7 @@ assert(
 );
 assert(boss_support_height > 0, "bolt boss support height must be positive");
 assert(
-    boss_support_top_radius > clamp_bolt_diameter / 2 + wall_thickness / 2,
+    boss_support_top_radius >= boss_support_min_radius,
     "bolt boss support is too narrow at the plate"
 );
 assert(
@@ -268,8 +274,8 @@ module main_bolt_lugs() {
             main_lug_top_z
         );
 
-        // In print orientation this frustum grows outward at 45 degrees from
-        // the plate, supporting the otherwise floating outer bolt boss.
+        // In print orientation this frustum grows outward at no more than the
+        // configured support angle, avoiding a floating outer bolt boss.
         translate([side * bolt_x, 0, main_lug_top_z])
             cylinder(
                 h = boss_support_height,
