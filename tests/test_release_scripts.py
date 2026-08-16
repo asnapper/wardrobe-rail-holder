@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_MODELS = ROOT / "scripts" / "build-models.sh"
 BUILD_P1S = ROOT / "scripts" / "build-p1s.sh"
+BUILD_RENDER = ROOT / "scripts" / "build-render.sh"
 
 EXPECTED = {
     "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 30.0), 1),
@@ -23,6 +24,35 @@ EXPECTED = {
 }
 
 RELEASE_FILENAMES = set(EXPECTED) | {"wardrobe_rail_bracket_complete.3mf"}
+
+
+class RenderBuildTests(unittest.TestCase):
+    def test_missing_xvfb_preserves_render_destination(self):
+        self.assertTrue(BUILD_RENDER.is_file(), "scripts/build-render.sh is missing")
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            output = temporary_path / "render.png"
+            sentinel = b"known-good render\x00\xff"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "XVFB_RUN_BIN": "/definitely/missing/xvfb-run",
+            }
+
+            result = subprocess.run(
+                [str(BUILD_RENDER), "--output", str(output)],
+                text=True,
+                capture_output=True,
+                env=environment,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Xvfb", result.stderr)
+            self.assertIn(
+                "https://packages.ubuntu.com/search?keywords=xvfb",
+                result.stderr,
+            )
+            self.assertEqual(output.read_bytes(), sentinel)
 
 
 def binary_stl_triangles(path: Path):
