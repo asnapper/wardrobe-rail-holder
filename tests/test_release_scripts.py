@@ -90,6 +90,14 @@ def envelope_and_components(triangles):
 
 
 class ReleaseModelBuildTests(unittest.TestCase):
+    def test_repository_has_no_obsolete_root_model_exports(self):
+        for filename in ("wardrobe_rail_bracket.3mf", "wardrobe_rail_bracket.stl"):
+            with self.subTest(filename=filename):
+                self.assertFalse(
+                    (ROOT / filename).exists(),
+                    f"obsolete root model export found: {filename}",
+                )
+
     def run_builder(self, output_directory: Path, environment=None):
         self.assertTrue(BUILD_MODELS.is_file(), "scripts/build-models.sh is missing")
         return subprocess.run(
