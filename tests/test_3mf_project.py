@@ -15,7 +15,7 @@ class OrcaProjectTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not PROJECT.is_file():
-            raise AssertionError(f"sliced Bambu project is missing: {PROJECT}")
+            raise AssertionError(f"sliced Orca P1S project is missing: {PROJECT}")
 
         cls.archive = zipfile.ZipFile(PROJECT)
         cls.addClassCleanup(cls.archive.close)

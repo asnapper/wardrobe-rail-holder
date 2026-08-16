@@ -22,6 +22,7 @@ case $# in
         ;;
 esac
 
+PYTHON=$(find_python3)
 ORCA_RELEASE_URL=https://github.com/OrcaSlicer/OrcaSlicer/releases
 ORCASLICER=$(find_required_tool \
     "${ORCASLICER_BIN:-}" \
@@ -53,6 +54,7 @@ MODEL="$REPOSITORY_ROOT/wardrobe_rail_bracket.scad"
 MACHINE_PROFILE="$REPOSITORY_ROOT/profiles/orca/p1s-0.4-machine.json"
 FILAMENT_PROFILE="$REPOSITORY_ROOT/profiles/orca/pla-basic.json"
 PROCESS_PROFILE="$REPOSITORY_ROOT/profiles/orca/bracket-strength.json"
+VALIDATOR="$REPOSITORY_ROOT/scripts/validate_release.py"
 
 export_stl() {
     mode=$1 output=$2
@@ -103,5 +105,7 @@ result_return_code=$(sed -n \
     || die "OrcaSlicer result.json has no numeric return_code"
 [ "$result_return_code" -eq 0 ] \
     || die "OrcaSlicer result.json reports return_code $result_return_code"
+
+"$PYTHON" "$VALIDATOR" p1s "$ARCHIVE"
 
 atomic_install "$ARCHIVE" "$OUTPUT_FILE"

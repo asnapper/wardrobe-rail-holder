@@ -47,8 +47,11 @@ it.
 
 ## Reproducing release assets
 
-Install [OpenSCAD](https://openscad.org/downloads.html) and
+Install [Python 3](https://www.python.org/downloads/),
+[OpenSCAD](https://openscad.org/downloads.html), and
 [OrcaSlicer 2.4 or later](https://github.com/OrcaSlicer/OrcaSlicer/releases).
+Python 3 runs the standard-library artifact validator that checks every staged
+model and sliced project before any release file is replaced.
 [`xvfb-run`](https://packages.ubuntu.com/search?keywords=xvfb) is optional for
 the aggregate release build: without it, `build-all.sh` still builds the models
 and P1S project but preserves the existing render. It is required whenever
@@ -63,11 +66,13 @@ Run the individual builders from the repository root:
 ./scripts/build-all.sh     # models and P1S project; regenerates render if Xvfb is available
 ```
 
-The builders locate `openscad`, `orca-slicer` (also `orcaslicer` or
-`OrcaSlicer`), and `xvfb-run` on `PATH`. Set `OPENSCAD_BIN`, `ORCASLICER_BIN`,
-or `XVFB_RUN_BIN` to executable paths to override those selections, for example:
+The builders locate `python3`, `openscad`, `orca-slicer` (also `orcaslicer` or
+`OrcaSlicer`), and `xvfb-run` on `PATH`. Set `PYTHON_BIN`, `OPENSCAD_BIN`,
+`ORCASLICER_BIN`, or `XVFB_RUN_BIN` to executable paths to override those
+selections, for example:
 
 ```bash
+PYTHON_BIN=/opt/python/bin/python3 ./scripts/build-models.sh
 OPENSCAD_BIN=/opt/OpenSCAD/openscad ./scripts/build-models.sh
 ORCASLICER_BIN=/opt/OrcaSlicer/orca-slicer ./scripts/build-p1s.sh
 XVFB_RUN_BIN=/usr/bin/xvfb-run ./scripts/build-render.sh

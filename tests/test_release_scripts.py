@@ -3,6 +3,7 @@ import os
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -16,6 +17,8 @@ BUILD_MODELS = ROOT / "scripts" / "build-models.sh"
 BUILD_P1S = ROOT / "scripts" / "build-p1s.sh"
 BUILD_RENDER = ROOT / "scripts" / "build-render.sh"
 BUILD_ALL = ROOT / "scripts" / "build-all.sh"
+VALIDATOR = ROOT / "scripts" / "validate_release.py"
+P1S_FIXTURE = ROOT / "dist" / "wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf"
 
 EXPECTED = {
     "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 30.0), 1),
@@ -287,6 +290,106 @@ class ReleaseModelBuildTests(unittest.TestCase):
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "do not touch")
             self.assertFalse(RELEASE_FILENAMES & {path.name for path in output_directory.iterdir()})
 
+    def test_missing_python3_leaves_all_existing_models_unchanged(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_directory = Path(temporary_directory)
+            expected = {}
+            for index, filename in enumerate(sorted(RELEASE_FILENAMES)):
+                payload = f"existing model {index}".encode() + b"\x00\xff"
+                (output_directory / filename).write_bytes(payload)
+                expected[filename] = payload
+            environment = os.environ | {
+                "PYTHON_BIN": "/definitely/missing/python3",
+                "OPENSCAD_BIN": "/definitely/missing/openscad",
+            }
+
+            result = self.run_builder(output_directory, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Python 3", result.stderr)
+            self.assertIn("https://www.python.org/downloads/", result.stderr)
+            self.assertEqual(
+                {path.name: path.read_bytes() for path in output_directory.iterdir()},
+                expected,
+            )
+
+    def test_nominal_openscad_success_with_malformed_model_preserves_whole_set(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            output_directory = temporary_path / "models"
+            output_directory.mkdir()
+            expected = {}
+            for index, filename in enumerate(sorted(RELEASE_FILENAMES)):
+                payload = f"existing model {index}".encode() + b"\x00\xff"
+                (output_directory / filename).write_bytes(payload)
+                expected[filename] = payload
+
+            openscad = temporary_path / "openscad"
+            openscad.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, pathlib, shutil, sys\n"
+                "args = sys.argv[1:]\n"
+                "output = pathlib.Path(args[args.index('-o') + 1])\n"
+                "source = pathlib.Path(os.environ['MODEL_FIXTURES']) / output.name\n"
+                "shutil.copy2(source, output)\n"
+                "if output.name == 'wardrobe_rail_bracket_main.stl':\n"
+                "    output.write_bytes(b'nonempty but malformed STL')\n",
+                encoding="utf-8",
+            )
+            openscad.chmod(0o755)
+            environment = os.environ | {
+                "MODEL_FIXTURES": str(ROOT / "dist" / "models"),
+                "OPENSCAD_BIN": str(openscad),
+                "PYTHON_BIN": sys.executable,
+            }
+
+            result = self.run_builder(output_directory, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("STL", result.stderr)
+            self.assertEqual(
+                {path.name: path.read_bytes() for path in output_directory.iterdir()},
+                expected,
+            )
+
+    def test_nominal_openscad_success_with_incomplete_model_preserves_whole_set(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            output_directory = temporary_path / "models"
+            output_directory.mkdir()
+            expected = {}
+            for index, filename in enumerate(sorted(RELEASE_FILENAMES)):
+                payload = f"existing model {index}".encode() + b"\x00\xff"
+                (output_directory / filename).write_bytes(payload)
+                expected[filename] = payload
+
+            openscad = temporary_path / "openscad"
+            openscad.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, pathlib, shutil, sys\n"
+                "args = sys.argv[1:]\n"
+                "output = pathlib.Path(args[args.index('-o') + 1])\n"
+                "if output.name != 'wardrobe_rail_bracket_complete.3mf':\n"
+                "    source = pathlib.Path(os.environ['MODEL_FIXTURES']) / output.name\n"
+                "    shutil.copy2(source, output)\n",
+                encoding="utf-8",
+            )
+            openscad.chmod(0o755)
+            environment = os.environ | {
+                "MODEL_FIXTURES": str(ROOT / "dist" / "models"),
+                "OPENSCAD_BIN": str(openscad),
+                "PYTHON_BIN": sys.executable,
+            }
+
+            result = self.run_builder(output_directory, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("nonempty", result.stderr)
+            self.assertEqual(
+                {path.name: path.read_bytes() for path in output_directory.iterdir()},
+                expected,
+            )
+
     def assert_clean_3mf(self, output: Path):
         with zipfile.ZipFile(output) as archive:
             names = archive.namelist()
@@ -383,6 +486,23 @@ class P1SBuildTests(unittest.TestCase):
             self.assertNotEqual(existing_result.returncode, 0)
             self.assertEqual(existing_output.read_bytes(), sentinel)
 
+    def test_missing_python3_preserves_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "release.gcode.3mf"
+            sentinel = b"known-good release\x00\xff"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "PYTHON_BIN": "/definitely/missing/python3",
+                "ORCASLICER_BIN": "/definitely/missing/orca",
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Python 3", result.stderr)
+            self.assertIn("https://www.python.org/downloads/", result.stderr)
+            self.assertEqual(output.read_bytes(), sentinel)
+
     def test_rejects_orcaslicer_before_2_4_without_touching_destination(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
@@ -437,7 +557,7 @@ class P1SBuildTests(unittest.TestCase):
             self.make_executable(
                 orca,
                 "#!/usr/bin/env python3\n"
-                "import json, os, pathlib, sys\n"
+                "import json, os, pathlib, shutil, sys\n"
                 "args = sys.argv[1:]\n"
                 "if args == ['--help']:\n"
                 "    print('OrcaSlicer-2.4.2:')\n"
@@ -449,7 +569,7 @@ class P1SBuildTests(unittest.TestCase):
                 "    args[args.index('--outputdir') + 1]\n"
                 ")\n"
                 "archive_name = args[args.index('--export-3mf') + 1]\n"
-                "(output_directory / archive_name).write_bytes(b'fake sliced archive')\n"
+                "shutil.copy2(os.environ['P1S_FIXTURE'], output_directory / archive_name)\n"
                 "(output_directory / 'result.json').write_text(\n"
                 "    json.dumps({'return_code': 0}), encoding='utf-8'\n"
                 ")\n",
@@ -461,6 +581,8 @@ class P1SBuildTests(unittest.TestCase):
                 "ORCASLICER_BIN": str(orca),
                 "OPENSCAD_ARGS_FILE": str(openscad_arguments),
                 "ORCA_ARGS_FILE": str(orca_arguments),
+                "P1S_FIXTURE": str(P1S_FIXTURE),
+                "PYTHON_BIN": sys.executable,
             }
             environment.pop("DISPLAY", None)
             environment.pop("WAYLAND_DISPLAY", None)
@@ -468,7 +590,7 @@ class P1SBuildTests(unittest.TestCase):
             result = self.run_builder(output, environment)
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(output.read_bytes(), b"fake sliced archive")
+            self.assertEqual(output.read_bytes(), P1S_FIXTURE.read_bytes())
 
             openscad_args = openscad_arguments.read_text(encoding="utf-8")
             self.assertEqual(openscad_args.count("part=\"main_print\""), 1)
@@ -496,6 +618,91 @@ class P1SBuildTests(unittest.TestCase):
             self.assertEqual(model_inputs[0], model_inputs[1])
             self.assertEqual(model_inputs[2], model_inputs[3])
 
+    def test_nominal_orca_success_with_malformed_archive_preserves_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            openscad = temporary_path / "openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'stl')\n",
+            )
+            orca = temporary_path / "orca"
+            self.make_executable(
+                orca,
+                "#!/usr/bin/env python3\n"
+                "import json, os, pathlib, shutil, sys\n"
+                "args = sys.argv[1:]\n"
+                "if args == ['--help']:\n"
+                "    print('OrcaSlicer-2.4.2:')\n"
+                "    raise SystemExit(0)\n"
+                "output_directory = pathlib.Path(args[args.index('--outputdir') + 1])\n"
+                "archive_name = args[args.index('--export-3mf') + 1]\n"
+                "(output_directory / archive_name).write_bytes(b'nonempty malformed ZIP')\n"
+                "(output_directory / 'result.json').write_text(\n"
+                "    json.dumps({'return_code': 0}), encoding='utf-8'\n"
+                ")\n",
+            )
+            output = temporary_path / "release.gcode.3mf"
+            sentinel = b"known-good release\x00\xff"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+                "PYTHON_BIN": sys.executable,
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ZIP", result.stderr)
+            self.assertEqual(output.read_bytes(), sentinel)
+
+    def test_nominal_orca_success_with_incomplete_archive_preserves_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            openscad = temporary_path / "openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'stl')\n",
+            )
+            orca = temporary_path / "orca"
+            self.make_executable(
+                orca,
+                "#!/usr/bin/env python3\n"
+                "import json, pathlib, sys, zipfile\n"
+                "args = sys.argv[1:]\n"
+                "if args == ['--help']:\n"
+                "    print('OrcaSlicer-2.4.2:')\n"
+                "    raise SystemExit(0)\n"
+                "output_directory = pathlib.Path(args[args.index('--outputdir') + 1])\n"
+                "archive_name = args[args.index('--export-3mf') + 1]\n"
+                "with zipfile.ZipFile(output_directory / archive_name, 'w') as archive:\n"
+                "    archive.writestr('3D/3dmodel.model', '<model/>')\n"
+                "(output_directory / 'result.json').write_text(\n"
+                "    json.dumps({'return_code': 0}), encoding='utf-8'\n"
+                ")\n",
+            )
+            output = temporary_path / "release.gcode.3mf"
+            sentinel = b"known-good release\x00\xff"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+                "PYTHON_BIN": sys.executable,
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing", result.stderr.lower())
+            self.assertEqual(output.read_bytes(), sentinel)
+
     def test_result_json_failure_preserves_destination(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
@@ -511,7 +718,7 @@ class P1SBuildTests(unittest.TestCase):
             self.make_executable(
                 orca,
                 "#!/usr/bin/env python3\n"
-                "import json, pathlib, sys\n"
+                "import json, os, pathlib, shutil, sys\n"
                 "args = sys.argv[1:]\n"
                 "if args == ['--help']:\n"
                 "    print('OrcaSlicer-2.4.2:')\n"
@@ -633,7 +840,7 @@ class P1SBuildTests(unittest.TestCase):
             self.make_executable(
                 orca,
                 "#!/usr/bin/env python3\n"
-                "import json, pathlib, sys\n"
+                "import json, os, pathlib, shutil, sys\n"
                 "args = sys.argv[1:]\n"
                 "if args == ['--help']:\n"
                 "    print('OrcaSlicer-2.4.2:')\n"
@@ -642,7 +849,7 @@ class P1SBuildTests(unittest.TestCase):
                 "    args[args.index('--outputdir') + 1]\n"
                 ")\n"
                 "archive_name = args[args.index('--export-3mf') + 1]\n"
-                "(output_directory / archive_name).write_bytes(b'slice')\n"
+                "shutil.copy2(os.environ['P1S_FIXTURE'], output_directory / archive_name)\n"
                 "(output_directory / 'result.json').write_text(\n"
                 "    json.dumps({'return_code': 0}), encoding='utf-8'\n"
                 ")\n",
@@ -653,12 +860,14 @@ class P1SBuildTests(unittest.TestCase):
             environment = os.environ | {
                 "OPENSCAD_BIN": str(openscad),
                 "ORCASLICER_BIN": relative_orca,
+                "P1S_FIXTURE": str(P1S_FIXTURE),
+                "PYTHON_BIN": sys.executable,
             }
 
             result = self.run_builder(output, environment)
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(output.read_bytes(), b"slice")
+            self.assertEqual(output.read_bytes(), P1S_FIXTURE.read_bytes())
 
     def test_slice_must_write_a_fresh_result_json(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -702,6 +911,53 @@ class P1SBuildTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("result.json", result.stderr)
             self.assertEqual(output.read_bytes(), sentinel)
+
+
+class RealOrcaSmokeTests(unittest.TestCase):
+    def locate_orca(self):
+        override = os.environ.get("ORCASLICER_BIN")
+        if override:
+            return override if os.access(override, os.X_OK) else None
+        for candidate in ("orca-slicer", "orcaslicer", "OrcaSlicer"):
+            located = shutil.which(candidate)
+            if located:
+                return located
+        return None
+
+    def test_real_orca_builds_valid_p1s_archive_without_display(self):
+        orca = self.locate_orca()
+        if orca is None:
+            self.skipTest(
+                "OrcaSlicer unavailable via ORCASLICER_BIN or supported PATH names"
+            )
+        if shutil.which("openscad") is None and not os.environ.get("OPENSCAD_BIN"):
+            self.skipTest("OpenSCAD unavailable for the real Orca smoke test")
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "smoke.gcode.3mf"
+            environment = os.environ | {
+                "ORCASLICER_BIN": orca,
+                "PYTHON_BIN": sys.executable,
+            }
+            environment.pop("DISPLAY", None)
+            environment.pop("WAYLAND_DISPLAY", None)
+
+            build = subprocess.run(
+                [str(BUILD_P1S), "--output", str(output)],
+                text=True,
+                capture_output=True,
+                env=environment,
+                timeout=900,
+            )
+            self.assertEqual(build.returncode, 0, build.stderr)
+
+            validation = subprocess.run(
+                [sys.executable, str(VALIDATOR), "p1s", str(output)],
+                text=True,
+                capture_output=True,
+                timeout=120,
+            )
+            self.assertEqual(validation.returncode, 0, validation.stderr)
 
 
 if __name__ == "__main__":

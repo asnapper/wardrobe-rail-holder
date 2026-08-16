@@ -22,8 +22,10 @@ case $# in
         ;;
 esac
 
+PYTHON=$(find_python3)
 OPENSCAD=$(find_required_tool "${OPENSCAD_BIN:-}" "OpenSCAD" "https://openscad.org/downloads.html" openscad)
 MODEL="$REPOSITORY_ROOT/wardrobe_rail_bracket.scad"
+VALIDATOR="$REPOSITORY_ROOT/scripts/validate_release.py"
 BUILD_DIRECTORY=$(new_build_dir)
 trap 'rm -rf "$BUILD_DIRECTORY"' EXIT HUP INT TERM
 
@@ -46,6 +48,8 @@ export_stl cap_print "$BUILD_DIRECTORY/wardrobe_rail_bracket_cap.stl"
 export_3mf main_print "$BUILD_DIRECTORY/wardrobe_rail_bracket_main.3mf"
 export_3mf cap_print "$BUILD_DIRECTORY/wardrobe_rail_bracket_cap.3mf"
 export_3mf print "$BUILD_DIRECTORY/wardrobe_rail_bracket_complete.3mf"
+
+"$PYTHON" "$VALIDATOR" models "$BUILD_DIRECTORY"
 
 for filename in \
     wardrobe_rail_bracket_main.stl \
