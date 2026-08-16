@@ -95,6 +95,31 @@ class OpenScadRenderTests(unittest.TestCase):
         result = subprocess.run(command, text=True, capture_output=True)
         return result, output
 
+    def assert_probe_does_not_intersect(self, model_output, probe_body, message):
+        probe = model_output.parent / "clearance-probe.scad"
+        obstruction = model_output.parent / "clearance-probe.stl"
+        probe.write_text(
+            "intersection() {\n"
+            f'  import("{model_output.as_posix()}");\n'
+            f"  {probe_body}\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                OPENSCAD,
+                "--export-format",
+                "binstl",
+                "-o",
+                str(obstruction),
+                str(probe),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0, message)
+        self.assertIn("Current top level object is empty", result.stderr)
+
     def test_all_output_modes_render_as_nonempty_solids(self):
         expected_components = {"assembly": 2, "main": 1, "cap": 1, "print": 2}
         for mode in ("assembly", "main", "cap", "print"):
@@ -113,14 +138,14 @@ class OpenScadRenderTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         lower, upper, _ = stl_bounds(output)
         size = tuple(round(high - low, 1) for low, high in zip(lower, upper))
-        self.assertEqual(size[0:2], (57.1, 75.0))
+        self.assertEqual(size[0:2], (63.5, 75.0))
         self.assertGreaterEqual(size[2], 45.5)
         self.assertLessEqual(size[2], 47.0)
 
     def test_individual_print_modes_are_manifold_and_on_the_build_plate(self):
         expected_sizes = {
-            "main_print": (57.1, 75.0, 30.0),
-            "cap_print": (57.1, 24.0, 15.7),
+            "main_print": (63.5, 75.0, 30.0),
+            "cap_print": (63.5, 24.0, 15.7),
         }
         for mode, expected_size in expected_sizes.items():
             with self.subTest(mode=mode):
@@ -188,7 +213,7 @@ class OpenScadRenderTests(unittest.TestCase):
         unsupported_output = main_output.parent / "unsupported-boss-probe.stl"
         unsupported_probe.write_text(
             "difference() {\n"
-            "  translate([24.18, 0, 8]) cylinder(h=4, r=0.15, $fn=16);\n"
+            "  translate([26.5, 0, 8]) cylinder(h=4, r=0.15, $fn=16);\n"
             f'  import("{main_output.as_posix()}");\n'
             "}\n",
             encoding="utf-8",
@@ -211,6 +236,40 @@ class OpenScadRenderTests(unittest.TestCase):
             "the outer bolt boss begins as an unsupported cantilever",
         )
         self.assertIn("Current top level object is empty", probe_result.stderr)
+
+    def test_m6_button_head_bolt_and_standard_nut_fit_the_voids(self):
+        cap_result, cap_output = self.render("cap")
+        self.assertEqual(cap_result.returncode, 0, cap_result.stderr)
+        main_result, main_output = self.render("main")
+        self.assertEqual(main_result.returncode, 0, main_result.stderr)
+
+        for side in (-1, 1):
+            bolt_x = side * 19.75
+            with self.subTest(side=side, hardware="button-head bolt"):
+                self.assert_probe_does_not_intersect(
+                    cap_output,
+                    "union() {"
+                    f" translate([{bolt_x}, 0, -36.4]) cylinder(h=3.3, d=10.5, $fn=64);"
+                    f" translate([{bolt_x}, 0, -33.1]) cylinder(h=12, d=6, $fn=64);"
+                    " }",
+                    "nominal M6 button-head hardware intersects the cap",
+                )
+
+            with self.subTest(side=side, hardware="standard hex nut"):
+                self.assert_probe_does_not_intersect(
+                    main_output,
+                    "union() {"
+                    f" translate([{bolt_x}, 0, -27.48]) cylinder(h=4.96, r=10/sqrt(3), $fn=6);"
+                    f" translate([{bolt_x - 10 / 3 ** 0.5}, -12.98, -27.48])"
+                    f" cube([{20 / 3 ** 0.5}, 12.96, 4.96]);"
+                    " }",
+                    "standard M6 nut cannot occupy or enter the captive pocket",
+                )
+
+    def test_bolt_length_must_fully_engage_the_captive_nut(self):
+        result, _ = self.render("main", "clamp_bolt_length=10")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("clamp bolt is too short to engage the captive nut", result.stderr)
 
     def test_invalid_rail_radius_is_rejected(self):
         result, _ = self.render("main", "rail_radius=8")

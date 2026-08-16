@@ -94,6 +94,21 @@ class BambuProjectTests(unittest.TestCase):
         )
         self.assertEqual(len(root.findall("./plate/model_instance")), 4)
 
+        object_models = sorted(
+            name
+            for name in self.names
+            if name.startswith("3D/Objects/") and name.endswith(".model")
+        )
+        widths = []
+        for model_path in object_models:
+            model_root = ET.fromstring(self.archive.read(model_path))
+            vertices = model_root.findall(
+                ".//{http://schemas.microsoft.com/3dmanufacturing/core/2015/02}vertex"
+            )
+            x_values = [float(vertex.attrib["x"]) for vertex in vertices]
+            widths.append(round(max(x_values) - min(x_values), 1))
+        self.assertEqual(widths, [63.5, 63.5, 63.5, 63.5])
+
     def test_slice_is_support_free_and_has_plausible_estimates(self):
         root = ET.fromstring(self.archive.read("Metadata/slice_info.config"))
         plate = root.find("plate")
@@ -104,10 +119,10 @@ class BambuProjectTests(unittest.TestCase):
         }
         self.assertEqual(metadata["support_used"], "false")
         self.assertEqual(metadata["outside"], "false")
-        self.assertGreater(float(metadata["weight"]), 110)
-        self.assertLess(float(metadata["weight"]), 120)
-        self.assertGreater(float(metadata["prediction"]), 18_000)
-        self.assertLess(float(metadata["prediction"]), 18_500)
+        self.assertGreater(float(metadata["weight"]), 125)
+        self.assertLess(float(metadata["weight"]), 135)
+        self.assertGreater(float(metadata["prediction"]), 19_500)
+        self.assertLess(float(metadata["prediction"]), 19_750)
 
         gcode = self.archive.read("Metadata/plate_1.gcode").decode(
             "utf-8", errors="replace"

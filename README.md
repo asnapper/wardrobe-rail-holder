@@ -8,8 +8,8 @@ removable lower cap.
 
 ## Hardware for one bracket
 
-- 2 × M4 × 25 mm socket-head machine screws
-- 2 × standard M4 hex nuts (7 mm nominal across flats)
+- 2 × M6 × 12 mm button-head socket screws
+- 2 × standard M6 hex nuts (10 mm nominal across flats, 5 mm thick)
 - 2 × 4 mm countersunk ceiling screws
 - Ceiling anchors appropriate for the ceiling construction and intended load
 
@@ -26,8 +26,8 @@ toolpaths.
 
 The embedded profile uses 0.20 mm layers, 5 walls, 6 top and bottom layers,
 40% gyroid infill, a 5 mm outer brim with a 0.1 mm gap, and no supports. The
-official slicer reports 150 layers, approximately 115.66 g of filament, and an
-estimated print time of 5 h 03 min. Review the selected filament and build plate
+official slicer reports 150 layers, approximately 128.97 g of filament, and an
+estimated print time of 5 h 27 min. Review the selected filament and build plate
 in Bambu Studio before sending it to the printer.
 
 Bambu Studio records its standard enclosed-printer PLA advisory because the
@@ -86,13 +86,14 @@ re-check hole and rail clearances with a fit sample.
 
 ## Assembly
 
-1. Slide one M4 nut into each side-loading hexagonal pocket in the main body.
+1. Slide one standard M6 nut into each side-loading hexagonal pocket in the
+   main body.
 2. Fasten the main body to structural ceiling material using both countersunk
    holes and suitable anchors.
 3. Lift the rail into the downward-facing upper saddle.
 4. Place the lower cap around the rail, with its bolt-head recesses facing down.
-5. Insert the two M4 × 25 mm bolts and tighten them evenly. Stop once the cap is
-   secure; do not crush the rail or strip the printed part.
+5. Insert the two M6 × 12 mm button-head bolts and tighten them evenly. Stop
+   once the cap is secure; do not crush the rail or strip the printed part.
 
 The 0.6 mm gap between the body and cap provides take-up for tolerance. A small
 visible gap after tightening is normal.

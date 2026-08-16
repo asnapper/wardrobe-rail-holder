@@ -18,7 +18,7 @@ rail_radius = 7;                // rounded-rectangle corner radius
 rail_clearance = 0.3;           // clearance on each side
 ceiling_gap = 10;               // ceiling to top of rail
 
-plate_width = 50;
+plate_width = 56;
 plate_length = 75;
 plate_thickness = 8;
 plate_corner_radius = 4;
@@ -35,14 +35,19 @@ cap_capture_height = 10.3;      // rail height captured below the split
 gusset_thickness = 6;
 gusset_rail_clearance = 0.4;
 
-clamp_bolt_diameter = 4;
+clamp_bolt_diameter = 6;
+clamp_bolt_length = 12;          // measured from beneath the button head
 clamp_bolt_clearance = 0.5;
-clamp_bolt_head_diameter = 8;
-clamp_bolt_head_height = 4.2;
-bolt_lug_radius = 10.5;
-m4_nut_across_flats = 7.2;
-m4_nut_thickness = 3.4;
-nut_clearance = 0.2;
+clamp_bolt_head_diameter = 11;   // clearance envelope for a 10.5 mm button head
+clamp_bolt_head_height = 3.6;    // clearance envelope for a 3.3 mm button head
+bolt_lug_radius = 12;
+clamp_nut_across_flats = 10;
+clamp_nut_thickness = 5;
+nut_clearance = 0.3;
+cap_bolt_seat_thickness = 2.5;
+nut_floor_thickness = 2.5;
+nut_roof_thickness = 6;
+minimum_bolt_projection = 0.8;
 print_support_angle = 30;       // maximum boss overhang from vertical
 
 $fn = 64;
@@ -59,12 +64,17 @@ split_relative_z = -socket_height / 2 + cap_capture_height;
 split_z = rail_center_z + split_relative_z;
 outer_profile_bottom_z = rail_center_z - outer_height / 2;
 cap_floor_z = outer_profile_bottom_z + 1;
-nut_corner_radius = (m4_nut_across_flats + nut_clearance) / sqrt(3);
+nut_corner_radius = (clamp_nut_across_flats + nut_clearance) / sqrt(3);
 bolt_x = socket_width / 2 + wall_thickness
     + max(clamp_bolt_head_diameter / 2, nut_corner_radius);
-nut_pocket_height = m4_nut_thickness + nut_clearance;
-nut_center_z = split_z + wall_thickness + nut_pocket_height / 2;
-main_lug_top_z = nut_center_z + nut_pocket_height / 2 + wall_thickness;
+nut_pocket_height = clamp_nut_thickness + nut_clearance;
+nut_pocket_bottom_z = split_z + nut_floor_thickness;
+nut_pocket_top_z = nut_pocket_bottom_z + nut_pocket_height;
+main_lug_top_z = nut_pocket_top_z + nut_roof_thickness;
+cap_top_z = split_z - clamp_gap;
+bolt_seat_z = cap_top_z - cap_bolt_seat_thickness;
+bolt_tip_z = bolt_seat_z + clamp_bolt_length;
+bolt_head_recess_depth = bolt_seat_z - cap_floor_z;
 boss_support_height = -plate_thickness - main_lug_top_z;
 boss_support_min_radius =
     (clamp_bolt_diameter + clamp_bolt_clearance) / 2 + wall_thickness / 2;
@@ -131,14 +141,29 @@ assert(
 );
 assert(
     clamp_bolt_diameter > 0
+    && clamp_bolt_length > 0
     && clamp_bolt_clearance >= 0
     && clamp_bolt_head_diameter > clamp_bolt_diameter
     && clamp_bolt_head_height > 0,
     "clamp bolt dimensions are invalid"
 );
 assert(
-    m4_nut_across_flats > 0 && m4_nut_thickness > 0 && nut_clearance >= 0,
+    clamp_nut_across_flats > 0
+    && clamp_nut_thickness > 0
+    && nut_clearance >= 0,
     "nut dimensions are invalid"
+);
+assert(
+    cap_bolt_seat_thickness >= 2.5 && nut_floor_thickness >= 2.5,
+    "bolt and nut bearing webs must be at least 2.5 mm thick"
+);
+assert(
+    nut_roof_thickness >= wall_thickness,
+    "not enough material above the captive nut"
+);
+assert(
+    minimum_bolt_projection >= 0,
+    "minimum bolt projection cannot be negative"
 );
 assert(
     bolt_lug_radius >= clamp_bolt_head_diameter / 2 + wall_thickness,
@@ -149,12 +174,16 @@ assert(
     "bolt lug is too small around the captive nut"
 );
 assert(
-    nut_center_z - nut_pocket_height / 2 - split_z >= wall_thickness,
-    "not enough material below the captive nut"
+    bolt_head_recess_depth >= clamp_bolt_head_height,
+    "button head does not fit inside the cap recess"
 );
 assert(
-    main_lug_top_z - nut_center_z - nut_pocket_height / 2 >= wall_thickness,
-    "not enough material above the captive nut"
+    bolt_tip_z - nut_pocket_top_z >= minimum_bolt_projection,
+    "clamp bolt is too short to engage the captive nut"
+);
+assert(
+    bolt_tip_z <= main_lug_top_z,
+    "clamp bolt extends beyond the main bolt lug"
 );
 assert(
     print_support_angle > 0 && print_support_angle <= 30,
@@ -355,7 +384,7 @@ module clamp_bolt_voids() {
 module clamp_bolt_head_recesses() {
     for (side = [-1, 1])
         translate([side * bolt_x, 0, cap_floor_z - 0.01])
-            cylinder(h = clamp_bolt_head_height + 0.02, d = clamp_bolt_head_diameter);
+            cylinder(h = bolt_head_recess_depth + 0.02, d = clamp_bolt_head_diameter);
 }
 
 
@@ -364,7 +393,7 @@ module captive_nut_pockets() {
         translate([
             side * bolt_x,
             0,
-            nut_center_z - nut_pocket_height / 2
+            nut_pocket_bottom_z
         ])
             cylinder(h = nut_pocket_height, r = nut_corner_radius, $fn = 6);
 
@@ -372,7 +401,7 @@ module captive_nut_pockets() {
         translate([
             side * bolt_x - nut_corner_radius,
             -clamp_depth / 2 - 1,
-            nut_center_z - nut_pocket_height / 2
+            nut_pocket_bottom_z
         ])
             cube([
                 2 * nut_corner_radius,
