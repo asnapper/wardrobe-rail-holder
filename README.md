@@ -49,16 +49,18 @@ it.
 
 Install [OpenSCAD](https://openscad.org/downloads.html) and
 [OrcaSlicer 2.4 or later](https://github.com/OrcaSlicer/OrcaSlicer/releases).
-[`xvfb-run`](https://packages.ubuntu.com/search?keywords=xvfb) is optional and
-is needed only to regenerate the rendered PNG on a headless machine.
+[`xvfb-run`](https://packages.ubuntu.com/search?keywords=xvfb) is optional for
+the aggregate release build: without it, `build-all.sh` still builds the models
+and P1S project but preserves the existing render. It is required whenever
+`build-render.sh` regenerates the PNG, including on a machine with a display.
 
 Run the individual builders from the repository root:
 
 ```bash
 ./scripts/build-models.sh  # neutral STL and 3MF files in dist/models
 ./scripts/build-p1s.sh     # sliced P1S .gcode.3mf in dist
-./scripts/build-render.sh  # docs/bracket-render.png; requires Xvfb
-./scripts/build-all.sh     # models and P1S project; render when Xvfb is available
+./scripts/build-render.sh  # regenerates docs/bracket-render.png; requires Xvfb
+./scripts/build-all.sh     # models and P1S project; regenerates render if Xvfb is available
 ```
 
 The builders locate `openscad`, `orca-slicer` (also `orcaslicer` or
