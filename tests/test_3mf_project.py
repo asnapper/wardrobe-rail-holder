@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "dist" / "wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf"
 
 
-class BambuProjectTests(unittest.TestCase):
+class OrcaProjectTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not PROJECT.is_file():
@@ -24,7 +24,7 @@ class BambuProjectTests(unittest.TestCase):
             cls.archive.read("Metadata/project_settings.config")
         )
 
-    def test_contains_models_toolpaths_and_preview(self):
+    def test_contains_models_and_toolpaths(self):
         required = {
             "3D/3dmodel.model",
             "Metadata/model_settings.config",
@@ -33,8 +33,6 @@ class BambuProjectTests(unittest.TestCase):
             "Metadata/plate_1.json",
             "Metadata/plate_1.gcode",
             "Metadata/plate_1.gcode.md5",
-            "Metadata/plate_1.png",
-            "Metadata/plate_1_small.png",
         }
         self.assertTrue(required <= self.names, required - self.names)
         self.assertGreater(
@@ -68,6 +66,9 @@ class BambuProjectTests(unittest.TestCase):
             "brim_width": "5",
             "brim_object_gap": "0.1",
             "print_sequence": "by layer",
+            "outer_wall_speed": "120",
+            "inner_wall_speed": "200",
+            "sparse_infill_speed": "200",
         }
         for key, value in expected.items():
             with self.subTest(key=key):
@@ -76,10 +77,6 @@ class BambuProjectTests(unittest.TestCase):
         self.assertEqual(self.settings["filament_type"], ["PLA"])
         self.assertEqual(self.settings["filament_vendor"], ["Bambu Lab"])
         self.assertEqual(self.settings["filament_density"], ["1.26"])
-        self.assertEqual(self.settings["outer_wall_speed"], ["120"])
-        self.assertEqual(self.settings["inner_wall_speed"], ["200"])
-        self.assertEqual(self.settings["sparse_infill_speed"], ["200"])
-
     def test_plate_contains_two_complete_brackets(self):
         root = ET.fromstring(self.archive.read("Metadata/model_settings.config"))
         names = []
@@ -119,10 +116,10 @@ class BambuProjectTests(unittest.TestCase):
         }
         self.assertEqual(metadata["support_used"], "false")
         self.assertEqual(metadata["outside"], "false")
-        self.assertGreater(float(metadata["weight"]), 125)
-        self.assertLess(float(metadata["weight"]), 135)
-        self.assertGreater(float(metadata["prediction"]), 19_500)
-        self.assertLess(float(metadata["prediction"]), 19_750)
+        self.assertGreater(float(metadata["weight"]), 133.0)
+        self.assertLess(float(metadata["weight"]), 133.2)
+        self.assertGreater(float(metadata["prediction"]), 17_400)
+        self.assertLess(float(metadata["prediction"]), 17_475)
 
         gcode = self.archive.read("Metadata/plate_1.gcode").decode(
             "utf-8", errors="replace"

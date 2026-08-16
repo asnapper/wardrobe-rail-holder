@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import struct
@@ -12,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_MODELS = ROOT / "scripts" / "build-models.sh"
+BUILD_P1S = ROOT / "scripts" / "build-p1s.sh"
 
 EXPECTED = {
     "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 30.0), 1),
@@ -203,6 +205,367 @@ class ReleaseModelBuildTests(unittest.TestCase):
             }
             & set(names)
         )
+
+
+class P1SBuildTests(unittest.TestCase):
+    def make_executable(self, path: Path, contents: str):
+        path.write_text(contents, encoding="utf-8")
+        path.chmod(0o755)
+
+    def run_builder(self, output: Path, environment=None):
+        self.assertTrue(BUILD_P1S.is_file(), "scripts/build-p1s.sh is missing")
+        return subprocess.run(
+            [str(BUILD_P1S), "--output", str(output)],
+            text=True,
+            capture_output=True,
+            env=environment,
+        )
+
+    def test_committed_profiles_are_flattened_official_presets_with_overlay(self):
+        profile_directory = ROOT / "profiles" / "orca"
+        machine = json.loads(
+            (profile_directory / "p1s-0.4-machine.json").read_text(encoding="utf-8")
+        )
+        filament = json.loads(
+            (profile_directory / "pla-basic.json").read_text(encoding="utf-8")
+        )
+        process = json.loads(
+            (profile_directory / "bracket-strength.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        for profile in (machine, filament, process):
+            self.assertNotIn("inherits", profile)
+
+        self.assertEqual(machine["name"], "Bambu Lab P1S 0.4 nozzle")
+        self.assertEqual(machine["printer_model"], "Bambu Lab P1S")
+        self.assertEqual(machine["printer_variant"], "0.4")
+        self.assertEqual(filament["name"], "Bambu PLA Basic @BBL X1C")
+        self.assertEqual(filament["filament_vendor"], ["Bambu Lab"])
+        self.assertEqual(process["name"], "0.20mm Standard @BBL X1C")
+
+        expected_overlay = {
+            "layer_height": "0.2",
+            "wall_loops": "5",
+            "top_shell_layers": "6",
+            "bottom_shell_layers": "6",
+            "sparse_infill_density": "40%",
+            "sparse_infill_pattern": "gyroid",
+            "enable_support": "0",
+            "brim_type": "outer_only",
+            "brim_width": "5",
+            "brim_object_gap": "0.1",
+            "print_sequence": "by layer",
+            "outer_wall_speed": "120",
+            "inner_wall_speed": "200",
+            "sparse_infill_speed": "200",
+        }
+        self.assertEqual(
+            {key: process[key] for key in expected_overlay}, expected_overlay
+        )
+
+    def test_missing_orcaslicer_preserves_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            environment = os.environ | {
+                "ORCASLICER_BIN": "/definitely/missing/orca"
+            }
+
+            absent_output = temporary_path / "absent.gcode.3mf"
+            absent_result = self.run_builder(absent_output, environment)
+            self.assertNotEqual(absent_result.returncode, 0)
+            self.assertIn("OrcaSlicer", absent_result.stderr)
+            self.assertIn(
+                "https://github.com/OrcaSlicer/OrcaSlicer/releases",
+                absent_result.stderr,
+            )
+            self.assertFalse(absent_output.exists())
+
+            existing_output = temporary_path / "existing.gcode.3mf"
+            sentinel = b"pre-existing release artifact\x00\xff"
+            existing_output.write_bytes(sentinel)
+            existing_result = self.run_builder(existing_output, environment)
+            self.assertNotEqual(existing_result.returncode, 0)
+            self.assertEqual(existing_output.read_bytes(), sentinel)
+
+    def test_rejects_orcaslicer_before_2_4_without_touching_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            old_orca = temporary_path / "orca-2.3"
+            self.make_executable(
+                old_orca,
+                "#!/usr/bin/env sh\n"
+                "[ \"${1-}\" = --help ] || exit 70\n"
+                "printf 'OrcaSlicer-2.3.9:\\n'\n",
+            )
+            openscad = temporary_path / "openscad"
+            self.make_executable(openscad, "#!/usr/bin/env sh\nexit 0\n")
+
+            output = temporary_path / "release.gcode.3mf"
+            sentinel = b"keep the previous sliced release"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "ORCASLICER_BIN": str(old_orca),
+                "OPENSCAD_BIN": str(openscad),
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("OrcaSlicer", result.stderr)
+            self.assertIn("2.4", result.stderr)
+            self.assertIn(
+                "https://github.com/OrcaSlicer/OrcaSlicer/releases",
+                result.stderr,
+            )
+            self.assertEqual(output.read_bytes(), sentinel)
+
+    def test_builds_four_object_slice_from_fresh_stls(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            openscad_arguments = temporary_path / "openscad-arguments.txt"
+            orca_arguments = temporary_path / "orca-arguments.txt"
+
+            openscad = temporary_path / "headless-openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import os, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "capture = pathlib.Path(os.environ['OPENSCAD_ARGS_FILE'])\n"
+                "with capture.open('a', encoding='utf-8') as stream:\n"
+                "    stream.write('\\n'.join(args) + '\\n')\n"
+                "output = pathlib.Path(args[args.index('-o') + 1])\n"
+                "output.write_bytes(b'fresh binary stl')\n",
+            )
+            orca = temporary_path / "headless-orca"
+            self.make_executable(
+                orca,
+                "#!/usr/bin/env python3\n"
+                "import json, os, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "if args == ['--help']:\n"
+                "    print('OrcaSlicer-2.4.2:')\n"
+                "    raise SystemExit(0)\n"
+                "pathlib.Path(os.environ['ORCA_ARGS_FILE']).write_text(\n"
+                "    '\\n'.join(args) + '\\n', encoding='utf-8'\n"
+                ")\n"
+                "output_directory = pathlib.Path(\n"
+                "    args[args.index('--outputdir') + 1]\n"
+                ")\n"
+                "archive_name = args[args.index('--export-3mf') + 1]\n"
+                "(output_directory / archive_name).write_bytes(b'fake sliced archive')\n"
+                "(output_directory / 'result.json').write_text(\n"
+                "    json.dumps({'return_code': 0}), encoding='utf-8'\n"
+                ")\n",
+            )
+
+            output = temporary_path / "release.gcode.3mf"
+            environment = os.environ | {
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+                "OPENSCAD_ARGS_FILE": str(openscad_arguments),
+                "ORCA_ARGS_FILE": str(orca_arguments),
+            }
+            environment.pop("DISPLAY", None)
+            environment.pop("WAYLAND_DISPLAY", None)
+
+            result = self.run_builder(output, environment)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output.read_bytes(), b"fake sliced archive")
+
+            openscad_args = openscad_arguments.read_text(encoding="utf-8")
+            self.assertEqual(openscad_args.count("part=\"main_print\""), 1)
+            self.assertEqual(openscad_args.count("part=\"cap_print\""), 1)
+
+            orca_args = orca_arguments.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(orca_args[orca_args.index("--arrange") + 1], "1")
+            self.assertIn("--ensure-on-bed", orca_args)
+            self.assertEqual(orca_args[orca_args.index("--slice") + 1], "0")
+            self.assertIn("--export-slicedata", orca_args)
+            self.assertEqual(
+                orca_args[orca_args.index("--load-settings") + 1],
+                f"{ROOT / 'profiles/orca/p1s-0.4-machine.json'};"
+                f"{ROOT / 'profiles/orca/bracket-strength.json'}",
+            )
+            self.assertEqual(
+                orca_args[orca_args.index("--load-filaments") + 1],
+                str(ROOT / "profiles/orca/pla-basic.json"),
+            )
+            model_inputs = orca_args[-4:]
+            self.assertEqual(
+                [Path(model).name for model in model_inputs],
+                ["main_print.stl", "main_print.stl", "cap_print.stl", "cap_print.stl"],
+            )
+            self.assertEqual(model_inputs[0], model_inputs[1])
+            self.assertEqual(model_inputs[2], model_inputs[3])
+
+    def test_result_json_failure_preserves_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            openscad = temporary_path / "openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'stl')\n",
+            )
+            orca = temporary_path / "orca"
+            self.make_executable(
+                orca,
+                "#!/usr/bin/env python3\n"
+                "import json, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "if args == ['--help']:\n"
+                "    print('OrcaSlicer-2.4.2:')\n"
+                "    raise SystemExit(0)\n"
+                "output_directory = pathlib.Path(\n"
+                "    args[args.index('--outputdir') + 1]\n"
+                ")\n"
+                "archive_name = args[args.index('--export-3mf') + 1]\n"
+                "(output_directory / archive_name).write_bytes(b'invalid slice')\n"
+                "(output_directory / 'result.json').write_text(\n"
+                "    json.dumps({'return_code': -17}), encoding='utf-8'\n"
+                ")\n",
+            )
+            output = temporary_path / "release.gcode.3mf"
+            sentinel = b"known-good release"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("result.json", result.stderr)
+            self.assertEqual(output.read_bytes(), sentinel)
+
+    def test_empty_archive_preserves_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            openscad = temporary_path / "openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'stl')\n",
+            )
+            orca = temporary_path / "orca"
+            self.make_executable(
+                orca,
+                "#!/usr/bin/env python3\n"
+                "import json, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "if args == ['--help']:\n"
+                "    print('OrcaSlicer-2.4.2:')\n"
+                "    raise SystemExit(0)\n"
+                "output_directory = pathlib.Path(\n"
+                "    args[args.index('--outputdir') + 1]\n"
+                ")\n"
+                "archive_name = args[args.index('--export-3mf') + 1]\n"
+                "(output_directory / archive_name).touch()\n"
+                "(output_directory / 'result.json').write_text(\n"
+                "    json.dumps({'return_code': 0}), encoding='utf-8'\n"
+                ")\n",
+            )
+            output = temporary_path / "release.gcode.3mf"
+            sentinel = b"known-good release"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("nonempty", result.stderr)
+            self.assertEqual(output.read_bytes(), sentinel)
+
+    def test_version_probe_runs_in_private_directory(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            version_working_directory = temporary_path / "version-cwd.txt"
+            orca = temporary_path / "orca"
+            self.make_executable(
+                orca,
+                "#!/usr/bin/env python3\n"
+                "import os, pathlib, sys\n"
+                "if sys.argv[1:] == ['--help']:\n"
+                "    pathlib.Path(os.environ['VERSION_CWD_FILE']).write_text(\n"
+                "        str(pathlib.Path.cwd()), encoding='utf-8'\n"
+                "    )\n"
+                "    print('OrcaSlicer-2.4.2:')\n"
+                "    raise SystemExit(0)\n"
+                "raise SystemExit(71)\n",
+            )
+            openscad = temporary_path / "openscad"
+            self.make_executable(openscad, "#!/usr/bin/env sh\nexit 72\n")
+            environment = os.environ | {
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+                "VERSION_CWD_FILE": str(version_working_directory),
+            }
+
+            result = self.run_builder(
+                temporary_path / "release.gcode.3mf", environment
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            probe_directory = Path(
+                version_working_directory.read_text(encoding="utf-8")
+            )
+            self.assertNotEqual(probe_directory, ROOT)
+            self.assertTrue(probe_directory.name.startswith("wardrobe-rail-holder."))
+
+    def test_slice_must_write_a_fresh_result_json(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            openscad = temporary_path / "openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'stl')\n",
+            )
+            orca = temporary_path / "orca"
+            self.make_executable(
+                orca,
+                "#!/usr/bin/env python3\n"
+                "import json, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "if args == ['--help']:\n"
+                "    pathlib.Path('result.json').write_text(\n"
+                "        json.dumps({'return_code': 0}), encoding='utf-8'\n"
+                "    )\n"
+                "    print('OrcaSlicer-2.4.2:')\n"
+                "    raise SystemExit(0)\n"
+                "output_directory = pathlib.Path(\n"
+                "    args[args.index('--outputdir') + 1]\n"
+                ")\n"
+                "archive_name = args[args.index('--export-3mf') + 1]\n"
+                "(output_directory / archive_name).write_bytes(b'slice')\n",
+            )
+            output = temporary_path / "release.gcode.3mf"
+            sentinel = b"known-good release"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("result.json", result.stderr)
+            self.assertEqual(output.read_bytes(), sentinel)
 
 
 if __name__ == "__main__":

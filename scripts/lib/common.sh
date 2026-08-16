@@ -31,6 +31,28 @@ require_nonempty() {
     [ -s "$1" ] || die "Expected a nonempty file: $1"
 }
 
+version_at_least() {
+    required_major=$1 required_minor=$2 detected_version=$3
+    detected_major=${detected_version%%.*}
+    if [ "$detected_major" = "$detected_version" ]; then
+        detected_minor=0
+    else
+        detected_remainder=${detected_version#*.}
+        detected_minor=${detected_remainder%%.*}
+    fi
+
+    case "$detected_major:$detected_minor" in
+        *[!0-9:]* | :* | *:)
+            return 1
+            ;;
+    esac
+
+    [ "$detected_major" -gt "$required_major" ] || {
+        [ "$detected_major" -eq "$required_major" ] \
+            && [ "$detected_minor" -ge "$required_minor" ]
+    }
+}
+
 atomic_install() {
     source_path=$1 destination_path=$2
     destination_directory=$(dirname "$destination_path")
