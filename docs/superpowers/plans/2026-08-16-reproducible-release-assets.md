@@ -40,12 +40,14 @@ Add `ReleaseModelBuildTests` that runs `scripts/build-models.sh --output-dir <te
 
 ```python
 EXPECTED = {
-    "wardrobe_rail_bracket_main.stl": ((63.5, 24.0, 30.0), 1),
+    "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 30.0), 1),
     "wardrobe_rail_bracket_cap.stl": ((63.5, 24.0, 15.7), 1),
-    "wardrobe_rail_bracket_main.3mf": ((63.5, 24.0, 30.0), 1),
+    "wardrobe_rail_bracket_main.3mf": ((63.5, 75.0, 30.0), 1),
     "wardrobe_rail_bracket_cap.3mf": ((63.5, 24.0, 15.7), 1),
 }
 ```
+
+The 75 mm Y extent is the full ceiling plate; 24 mm is only the clamp depth.
 
 For `wardrobe_rail_bracket_complete.3mf`, assert two disconnected printable volumes, nonnegative Z, no path ending in `.gcode`, and absence of `Metadata/project_settings.config`, `Metadata/model_settings.config`, and `Metadata/slice_info.config`.
 
