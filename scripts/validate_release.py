@@ -15,6 +15,9 @@ from pathlib import Path
 
 
 CORE_NAMESPACE = "{http://schemas.microsoft.com/3dmanufacturing/core/2015/02}"
+PRODUCTION_NAMESPACE = (
+    "{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}"
+)
 MODEL_CONTRACTS = {
     "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 30.0), 1),
     "wardrobe_rail_bracket_cap.stl": ((63.5, 24.0, 15.7), 1),
@@ -53,10 +56,19 @@ P1S_EXPECTED_SETTINGS = {
     "filament_vendor": ["Bambu Lab"],
     "filament_density": ["1.26"],
 }
+P1S_ROLE_ENVELOPES = {
+    "main_print.stl": (63.5, 75.0, 30.0),
+    "cap_print.stl": (63.5, 24.0, 15.7),
+}
+P1S_LAYER_COUNT = 150
 SUPPORT_TOOLPATH = re.compile(
     r"^\s*;\s*(?:FEATURE|TYPE)\s*:\s*SUPPORT(?:\s+INTERFACE)?\b",
     re.IGNORECASE | re.MULTILINE,
 )
+LAYER_MARKER = re.compile(
+    r"; layer num/total_layer_count: (\d+)/150"
+)
+GCODE_WORD = re.compile(r"([A-Z])\s*(-?(?:\d+(?:\.\d*)?|\.\d+))", re.IGNORECASE)
 
 
 class ValidationError(Exception):
@@ -273,21 +285,31 @@ def _required_archive_payload(archive, member):
     return payload
 
 
-def _validate_p1s_objects(archive):
+def _validate_p1s_objects(archive, package_model):
     model_settings = _xml_root(
         _required_archive_payload(archive, "Metadata/model_settings.config"),
         "Metadata/model_settings.config",
     )
     objects = model_settings.findall("./object")
     instances = model_settings.findall("./plate/model_instance")
-    names = []
+    roles_by_id = {}
     for object_element in objects:
         metadata = object_element.find("./metadata[@key='name']")
-        if metadata is None or "value" not in metadata.attrib:
+        object_id = object_element.attrib.get("id")
+        if (
+            object_id is None
+            or object_id in roles_by_id
+            or metadata is None
+            or "value" not in metadata.attrib
+        ):
             raise ValidationError("P1S object is missing its model name")
-        names.append(metadata.attrib["value"])
+        roles_by_id[object_id] = metadata.attrib["value"]
     expected_names = Counter({"main_print.stl": 2, "cap_print.stl": 2})
-    if len(objects) != 4 or len(instances) != 4 or Counter(names) != expected_names:
+    if (
+        len(objects) != 4
+        or len(instances) != 4
+        or Counter(roles_by_id.values()) != expected_names
+    ):
         raise ValidationError(
             "incorrect P1S object count: expected two main and two cap objects"
         )
@@ -301,13 +323,46 @@ def _validate_p1s_objects(archive):
         raise ValidationError(
             f"incorrect P1S object model count: {len(object_members)}, expected 4"
         )
-    for member in object_members:
+    package_objects = package_model.findall(
+        f"./{CORE_NAMESPACE}resources/{CORE_NAMESPACE}object"
+    )
+    package_ids = {object_element.attrib.get("id") for object_element in package_objects}
+    if package_ids != set(roles_by_id):
+        raise ValidationError(
+            "P1S package objects do not match model-settings object roles"
+        )
+
+    referenced_members = []
+    for object_element in package_objects:
+        components = object_element.findall(
+            f"./{CORE_NAMESPACE}components/{CORE_NAMESPACE}component"
+        )
+        if len(components) != 1:
+            raise ValidationError("P1S package object must reference one mesh payload")
+        member = components[0].attrib.get(f"{PRODUCTION_NAMESPACE}path", "").lstrip(
+            "/"
+        )
+        role = roles_by_id[object_element.attrib["id"]]
+        if member not in object_members:
+            raise ValidationError(
+                f"P1S {role} object is missing its referenced mesh payload: {member}"
+            )
+        referenced_members.append(member)
         triangles = _triangles_from_model(_required_archive_payload(archive, member), member)
         size, _ = _mesh_envelope(triangles)
-        if abs(size[0] - 63.5) > 0.06:
+        expected_size = P1S_ROLE_ENVELOPES[role]
+        if any(
+            abs(actual - expected) > 0.06
+            for actual, expected in zip(size, expected_size)
+        ):
+            role_label = role.split("_", 1)[0]
+            formatted = tuple(round(value, 3) for value in size)
             raise ValidationError(
-                f"incorrect P1S object width for {member}: {size[0]:.3f}, expected 63.5"
+                f"incorrect P1S {role_label} object width/envelope for {member}: "
+                f"{formatted}, expected {expected_size}"
             )
+    if Counter(referenced_members) != Counter(object_members):
+        raise ValidationError("P1S package does not reference each object mesh once")
 
 
 def _validate_p1s_settings(archive):
@@ -356,6 +411,45 @@ def _validate_p1s_slice(archive):
     if SUPPORT_TOOLPATH.search(gcode_text):
         raise ValidationError("embedded G-code contains a support toolpath feature")
 
+    lines = gcode_text.splitlines()
+    declaration = f"; total layer number: {P1S_LAYER_COUNT}"
+    if sum(line.strip() == declaration for line in lines) != 1:
+        raise ValidationError(
+            f"embedded G-code must declare exactly {P1S_LAYER_COUNT} layers"
+        )
+    layer_numbers = []
+    for line in lines:
+        match = LAYER_MARKER.fullmatch(line.strip())
+        if match:
+            layer_numbers.append(int(match.group(1)))
+    expected_layers = list(range(1, P1S_LAYER_COUNT + 1))
+    if layer_numbers != expected_layers:
+        raise ValidationError(
+            "embedded G-code layer markers must enumerate 1 through 150 exactly once"
+        )
+    if sum(line.strip() == "; CHANGE_LAYER" for line in lines) != P1S_LAYER_COUNT:
+        raise ValidationError("embedded G-code must contain 150 layer-change markers")
+
+    printable_layers = set()
+    current_layer = None
+    for raw_line in lines:
+        marker = LAYER_MARKER.fullmatch(raw_line.strip())
+        if marker:
+            current_layer = int(marker.group(1))
+            continue
+        code = raw_line.split(";", 1)[0].strip()
+        if current_layer is None or not re.match(r"^G[01]\b", code, re.IGNORECASE):
+            continue
+        words = {letter.upper(): float(value) for letter, value in GCODE_WORD.findall(code)}
+        if ("X" in words or "Y" in words) and words.get("E", 0.0) > 0.0:
+            printable_layers.add(current_layer)
+    missing_toolpaths = sorted(set(expected_layers) - printable_layers)
+    if missing_toolpaths:
+        raise ValidationError(
+            "embedded G-code has no printable extrusion toolpath in layer(s): "
+            + ", ".join(map(str, missing_toolpaths))
+        )
+
 
 def validate_p1s(archive_path):
     archive_path = Path(archive_path)
@@ -388,7 +482,7 @@ def validate_p1s(archive_path):
             raise ValidationError(
                 f"malformed JSON payload Metadata/plate_1.json: {error}"
             ) from error
-        _validate_p1s_objects(archive)
+        _validate_p1s_objects(archive, package_model)
         _validate_p1s_settings(archive)
         _validate_p1s_slice(archive)
 

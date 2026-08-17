@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -409,6 +410,36 @@ class P1SBuildTests(unittest.TestCase):
         path.write_text(contents, encoding="utf-8")
         path.chmod(0o755)
 
+    def rewrite_archive(self, path: Path, replacements):
+        temporary = path.with_name(f".{path.name}.rewrite")
+        with zipfile.ZipFile(path) as source, zipfile.ZipFile(
+            temporary, "w", compression=zipfile.ZIP_DEFLATED
+        ) as destination:
+            for member in source.namelist():
+                destination.writestr(
+                    member, replacements.get(member, source.read(member))
+                )
+        temporary.replace(path)
+
+    def make_fixture_orca(self, path: Path):
+        self.make_executable(
+            path,
+            "#!/usr/bin/env python3\n"
+            "import json, os, pathlib, shutil, sys\n"
+            "args = sys.argv[1:]\n"
+            "if args == ['--help']:\n"
+            "    print('OrcaSlicer-2.4.2:')\n"
+            "    raise SystemExit(0)\n"
+            "output_directory = pathlib.Path(args[args.index('--outputdir') + 1])\n"
+            "archive_name = args[args.index('--export-3mf') + 1]\n"
+            "shutil.copy2(\n"
+            "    os.environ['INVALID_P1S_FIXTURE'], output_directory / archive_name\n"
+            ")\n"
+            "(output_directory / 'result.json').write_text(\n"
+            "    json.dumps({'return_code': 0}), encoding='utf-8'\n"
+            ")\n",
+        )
+
     def run_builder(self, output: Path, environment=None):
         self.assertTrue(BUILD_P1S.is_file(), "scripts/build-p1s.sh is missing")
         return subprocess.run(
@@ -701,6 +732,87 @@ class P1SBuildTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing", result.stderr.lower())
+            self.assertEqual(output.read_bytes(), sentinel)
+
+    def test_main_as_cap_substitution_preserves_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            invalid_archive = temporary_path / "main-as-cap.gcode.3mf"
+            shutil.copy2(P1S_FIXTURE, invalid_archive)
+            with zipfile.ZipFile(invalid_archive) as source:
+                main_mesh = source.read("3D/Objects/main_print.stl_1.model")
+            self.rewrite_archive(
+                invalid_archive,
+                {
+                    "3D/Objects/cap_print.stl_3.model": main_mesh,
+                    "3D/Objects/cap_print.stl_4.model": main_mesh,
+                },
+            )
+
+            openscad = temporary_path / "openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'stl')\n",
+            )
+            orca = temporary_path / "orca"
+            self.make_fixture_orca(orca)
+            output = temporary_path / "release.gcode.3mf"
+            sentinel = b"known-good release\x00\xff"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "INVALID_P1S_FIXTURE": str(invalid_archive),
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+                "PYTHON_BIN": sys.executable,
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("cap", result.stderr.lower())
+            self.assertEqual(output.read_bytes(), sentinel)
+
+    def test_comment_only_gcode_preserves_destination(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            invalid_archive = temporary_path / "comment-only.gcode.3mf"
+            shutil.copy2(P1S_FIXTURE, invalid_archive)
+            gcode = b"; no printable toolpaths\n"
+            self.rewrite_archive(
+                invalid_archive,
+                {
+                    "Metadata/plate_1.gcode": gcode,
+                    "Metadata/plate_1.gcode.md5": hashlib.md5(gcode).hexdigest(),
+                },
+            )
+
+            openscad = temporary_path / "openscad"
+            self.make_executable(
+                openscad,
+                "#!/usr/bin/env python3\n"
+                "import pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "pathlib.Path(args[args.index('-o') + 1]).write_bytes(b'stl')\n",
+            )
+            orca = temporary_path / "orca"
+            self.make_fixture_orca(orca)
+            output = temporary_path / "release.gcode.3mf"
+            sentinel = b"known-good release\x00\xff"
+            output.write_bytes(sentinel)
+            environment = os.environ | {
+                "INVALID_P1S_FIXTURE": str(invalid_archive),
+                "OPENSCAD_BIN": str(openscad),
+                "ORCASLICER_BIN": str(orca),
+                "PYTHON_BIN": sys.executable,
+            }
+
+            result = self.run_builder(output, environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("layer", result.stderr.lower())
             self.assertEqual(output.read_bytes(), sentinel)
 
     def test_result_json_failure_preserves_destination(self):

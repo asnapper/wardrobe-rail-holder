@@ -288,6 +288,22 @@ class SharedReleaseValidatorTests(unittest.TestCase):
 
             self.assert_rejected(self.run_validator("p1s", archive), "width")
 
+    def test_p1s_rejects_main_meshes_substituted_for_cap_payloads(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = Path(temporary_directory) / "release.gcode.3mf"
+            self.copy_p1s(archive)
+            with zipfile.ZipFile(archive) as source:
+                main_mesh = source.read("3D/Objects/main_print.stl_1.model")
+            rewrite_zip(
+                archive,
+                replacements={
+                    "3D/Objects/cap_print.stl_3.model": main_mesh,
+                    "3D/Objects/cap_print.stl_4.model": main_mesh,
+                },
+            )
+
+            self.assert_rejected(self.run_validator("p1s", archive), "cap")
+
     def test_p1s_rejects_checksum_mismatch(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = Path(temporary_directory) / "release.gcode.3mf"
@@ -358,6 +374,21 @@ class SharedReleaseValidatorTests(unittest.TestCase):
             )
 
             self.assert_rejected(self.run_validator("p1s", archive), "support toolpath")
+
+    def test_p1s_rejects_checksum_updated_comment_only_gcode(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = Path(temporary_directory) / "release.gcode.3mf"
+            self.copy_p1s(archive)
+            gcode = b"; no printable toolpaths\n"
+            rewrite_zip(
+                archive,
+                replacements={
+                    "Metadata/plate_1.gcode": gcode,
+                    "Metadata/plate_1.gcode.md5": hashlib.md5(gcode).hexdigest(),
+                },
+            )
+
+            self.assert_rejected(self.run_validator("p1s", archive), "layer")
 
 
 if __name__ == "__main__":
