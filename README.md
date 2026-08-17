@@ -31,8 +31,8 @@ The P1S project was sliced with OrcaSlicer 2.4.2 for a P1S with a 0.4 mm
 nozzle, Textured PEI Plate, and Bambu PLA Basic. It contains four objects: two
 main bodies and two caps. Its embedded profile uses 0.20 mm layers, 5 walls, 6
 top and bottom layers, 40% gyroid infill, a 5 mm outer brim with a 0.1 mm gap,
-and no supports. OrcaSlicer reports 150 layers, 133.09 g of filament, and
-17,452 s (about 4 h 51 min) estimated print time.
+and no supports. OrcaSlicer reports 150 layers, 133.10 g of filament, and
+17,454 s (about 4 h 51 min) estimated print time.
 
 The headless P1S build is intended to reproduce the project settings and
 toolpaths; embedded thumbnails are not guaranteed. Review the selected filament
