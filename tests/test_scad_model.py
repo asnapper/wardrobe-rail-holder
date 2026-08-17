@@ -138,13 +138,11 @@ class OpenScadRenderTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         lower, upper, _ = stl_bounds(output)
         size = tuple(round(high - low, 1) for low, high in zip(lower, upper))
-        self.assertEqual(size[0:2], (63.5, 75.0))
-        self.assertGreaterEqual(size[2], 45.5)
-        self.assertLessEqual(size[2], 47.0)
+        self.assertEqual(size, (63.5, 75.0, 66.3))
 
     def test_individual_print_modes_are_manifold_and_on_the_build_plate(self):
         expected_sizes = {
-            "main_print": (63.5, 75.0, 30.0),
+            "main_print": (63.5, 75.0, 50.0),
             "cap_print": (63.5, 24.0, 15.7),
         }
         for mode, expected_size in expected_sizes.items():
@@ -158,6 +156,19 @@ class OpenScadRenderTests(unittest.TestCase):
                 components, invalid_edges = stl_topology(output)
                 self.assertEqual(components, 1)
                 self.assertEqual(invalid_edges, 0)
+
+    def test_ceiling_screw_shank_voids_keep_original_plate_coordinates(self):
+        result, main_output = self.render("main")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        for screw_y in (-20, 20):
+            with self.subTest(screw_y=screw_y):
+                self.assert_probe_does_not_intersect(
+                    main_output,
+                    f"translate([0, {screw_y}, -8.01]) "
+                    "cylinder(h=8.03, d=4.4, $fn=32);",
+                    "solid material obstructs the original ceiling screw shank void",
+                )
 
     def test_custom_rail_dimensions_change_clamp_envelope(self):
         default_result, default_output = self.render("cap")
@@ -213,7 +224,7 @@ class OpenScadRenderTests(unittest.TestCase):
         unsupported_output = main_output.parent / "unsupported-boss-probe.stl"
         unsupported_probe.write_text(
             "difference() {\n"
-            "  translate([26.5, 0, 8]) cylinder(h=4, r=0.15, $fn=16);\n"
+            "  translate([25.8, 0, 8]) cylinder(h=4, r=0.15, $fn=16);\n"
             f'  import("{main_output.as_posix()}");\n'
             "}\n",
             encoding="utf-8",
@@ -249,8 +260,8 @@ class OpenScadRenderTests(unittest.TestCase):
                 self.assert_probe_does_not_intersect(
                     cap_output,
                     "union() {"
-                    f" translate([{bolt_x}, 0, -36.4]) cylinder(h=3.3, d=10.5, $fn=64);"
-                    f" translate([{bolt_x}, 0, -33.1]) cylinder(h=12, d=6, $fn=64);"
+                    f" translate([{bolt_x}, 0, -56.4]) cylinder(h=3.3, d=10.5, $fn=64);"
+                    f" translate([{bolt_x}, 0, -53.1]) cylinder(h=12, d=6, $fn=64);"
                     " }",
                     "nominal M6 button-head hardware intersects the cap",
                 )
@@ -259,8 +270,8 @@ class OpenScadRenderTests(unittest.TestCase):
                 self.assert_probe_does_not_intersect(
                     main_output,
                     "union() {"
-                    f" translate([{bolt_x}, 0, -27.48]) cylinder(h=5.96, r=10/sqrt(3), $fn=6);"
-                    f" translate([{bolt_x - 10 / 3 ** 0.5}, -12.98, -27.48])"
+                    f" translate([{bolt_x}, 0, -47.48]) cylinder(h=5.96, r=10/sqrt(3), $fn=6);"
+                    f" translate([{bolt_x - 10 / 3 ** 0.5}, -12.98, -47.48])"
                     f" cube([{20 / 3 ** 0.5}, 12.96, 5.96]);"
                     " }",
                     "standard M6 nut cannot occupy or enter the captive pocket",

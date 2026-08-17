@@ -116,15 +116,15 @@ class OrcaProjectTests(unittest.TestCase):
         }
         self.assertEqual(metadata["support_used"], "false")
         self.assertEqual(metadata["outside"], "false")
-        self.assertGreater(float(metadata["weight"]), 133.0)
-        self.assertLess(float(metadata["weight"]), 133.2)
-        self.assertGreater(float(metadata["prediction"]), 17_400)
-        self.assertLess(float(metadata["prediction"]), 17_475)
+        self.assertGreaterEqual(float(metadata["weight"]), 169.0)
+        self.assertLessEqual(float(metadata["weight"]), 169.3)
+        self.assertGreaterEqual(float(metadata["prediction"]), 22_250)
+        self.assertLessEqual(float(metadata["prediction"]), 22_375)
 
         gcode = self.archive.read("Metadata/plate_1.gcode").decode(
             "utf-8", errors="replace"
         )
-        self.assertIn("; total layer number: 150", gcode)
+        self.assertIn("; total layer number: 250", gcode)
         self.assertNotIn("; FEATURE: Support", gcode)
 
     def test_only_known_slicer_advisory_is_present_and_documented(self):

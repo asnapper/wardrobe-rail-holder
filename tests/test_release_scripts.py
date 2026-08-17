@@ -22,13 +22,14 @@ VALIDATOR = ROOT / "scripts" / "validate_release.py"
 P1S_FIXTURE = ROOT / "dist" / "wardrobe_rail_bracket_P1S_0.4_PLA_2x.gcode.3mf"
 
 EXPECTED = {
-    "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 30.0), 1),
+    "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 50.0), 1),
     "wardrobe_rail_bracket_cap.stl": ((63.5, 24.0, 15.7), 1),
-    "wardrobe_rail_bracket_main.3mf": ((63.5, 75.0, 30.0), 1),
+    "wardrobe_rail_bracket_main.3mf": ((63.5, 75.0, 50.0), 1),
     "wardrobe_rail_bracket_cap.3mf": ((63.5, 24.0, 15.7), 1),
+    "wardrobe_rail_bracket_complete.3mf": ((133.5, 75.0, 50.0), 2),
 }
 
-RELEASE_FILENAMES = set(EXPECTED) | {"wardrobe_rail_bracket_complete.3mf"}
+RELEASE_FILENAMES = set(EXPECTED)
 
 
 class RenderBuildTests(unittest.TestCase):

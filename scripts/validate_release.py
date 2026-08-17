@@ -19,11 +19,11 @@ PRODUCTION_NAMESPACE = (
     "{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}"
 )
 MODEL_CONTRACTS = {
-    "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 30.0), 1),
+    "wardrobe_rail_bracket_main.stl": ((63.5, 75.0, 50.0), 1),
     "wardrobe_rail_bracket_cap.stl": ((63.5, 24.0, 15.7), 1),
-    "wardrobe_rail_bracket_main.3mf": ((63.5, 75.0, 30.0), 1),
+    "wardrobe_rail_bracket_main.3mf": ((63.5, 75.0, 50.0), 1),
     "wardrobe_rail_bracket_cap.3mf": ((63.5, 24.0, 15.7), 1),
-    "wardrobe_rail_bracket_complete.3mf": ((133.5, 75.0, 30.0), 2),
+    "wardrobe_rail_bracket_complete.3mf": ((133.5, 75.0, 50.0), 2),
 }
 P1S_REQUIRED_MEMBERS = {
     "3D/3dmodel.model",
@@ -57,16 +57,18 @@ P1S_EXPECTED_SETTINGS = {
     "filament_density": ["1.26"],
 }
 P1S_ROLE_ENVELOPES = {
-    "main_print.stl": (63.5, 75.0, 30.0),
+    "main_print.stl": (63.5, 75.0, 50.0),
     "cap_print.stl": (63.5, 24.0, 15.7),
 }
-P1S_LAYER_COUNT = 150
+P1S_LAYER_COUNT = 250
+P1S_WEIGHT_RANGE = (169.0, 169.3)
+P1S_TIME_RANGE = (22_250, 22_375)
 SUPPORT_TOOLPATH = re.compile(
     r"^\s*;\s*(?:FEATURE|TYPE)\s*:\s*SUPPORT(?:\s+INTERFACE)?\b",
     re.IGNORECASE | re.MULTILINE,
 )
 LAYER_MARKER = re.compile(
-    r"; layer num/total_layer_count: (\d+)/150"
+    rf"; layer num/total_layer_count: (\d+)/{P1S_LAYER_COUNT}"
 )
 GCODE_WORD = re.compile(r"([A-Z])\s*(-?(?:\d+(?:\.\d*)?|\.\d+))", re.IGNORECASE)
 
@@ -391,6 +393,24 @@ def _validate_p1s_slice(archive):
             f"incorrect P1S support_used metadata: {actual!r}, expected 'false'"
         )
 
+    for key, expected_range in (
+        ("weight", P1S_WEIGHT_RANGE),
+        ("prediction", P1S_TIME_RANGE),
+    ):
+        element = slice_info.find(f"./plate/metadata[@key='{key}']")
+        raw_value = None if element is None else element.attrib.get("value")
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError) as error:
+            raise ValidationError(
+                f"invalid P1S {key} estimate: {raw_value!r}"
+            ) from error
+        if not expected_range[0] <= value <= expected_range[1]:
+            raise ValidationError(
+                f"incorrect P1S {key} estimate: {value}, expected "
+                f"{expected_range[0]} through {expected_range[1]}"
+            )
+
     gcode = _required_archive_payload(archive, "Metadata/plate_1.gcode")
     checksum_payload = _required_archive_payload(
         archive, "Metadata/plate_1.gcode.md5"
@@ -425,10 +445,13 @@ def _validate_p1s_slice(archive):
     expected_layers = list(range(1, P1S_LAYER_COUNT + 1))
     if layer_numbers != expected_layers:
         raise ValidationError(
-            "embedded G-code layer markers must enumerate 1 through 150 exactly once"
+            "embedded G-code layer markers must enumerate 1 through "
+            f"{P1S_LAYER_COUNT} exactly once"
         )
     if sum(line.strip() == "; CHANGE_LAYER" for line in lines) != P1S_LAYER_COUNT:
-        raise ValidationError("embedded G-code must contain 150 layer-change markers")
+        raise ValidationError(
+            f"embedded G-code must contain {P1S_LAYER_COUNT} layer-change markers"
+        )
 
     printable_layers = set()
     current_layer = None

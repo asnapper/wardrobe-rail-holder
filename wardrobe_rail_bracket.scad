@@ -16,7 +16,7 @@ rail_width = 15;                // horizontal cross-section dimension
 rail_height = 30;               // vertical cross-section dimension
 rail_radius = 7;                // rounded-rectangle corner radius
 rail_clearance = 0.3;           // clearance on each side
-ceiling_gap = 10;               // ceiling to top of rail
+ceiling_gap = 30;               // ceiling to top of rail
 
 plate_width = 56;
 plate_length = 75;

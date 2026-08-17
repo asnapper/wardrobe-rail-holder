@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
+from scripts.validate_release import ValidationError, _validate_p1s_slice
+
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts" / "validate_release.py"
@@ -66,7 +68,7 @@ def one_volume_complete_model():
  <resources><object id="1" type="model"><mesh>
   <vertices>
    <vertex x="0" y="0" z="0"/><vertex x="133.5" y="0" z="0"/>
-   <vertex x="0" y="75" z="0"/><vertex x="0" y="0" z="30"/>
+   <vertex x="0" y="75" z="0"/><vertex x="0" y="0" z="50"/>
   </vertices>
   <triangles>
    <triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/>
@@ -91,7 +93,7 @@ def non_manifold_main_stl():
         0,
         0,
         0,
-        30,
+        50,
         0,
     )
     return header + struct.pack("<I", 1) + triangle
@@ -358,6 +360,37 @@ class SharedReleaseValidatorTests(unittest.TestCase):
             )
 
             self.assert_rejected(self.run_validator("p1s", archive), "support_used")
+
+    def test_p1s_rejects_implausible_weight_and_time_estimates(self):
+        cases = {
+            "weight": "168.9",
+            "prediction": "22376",
+        }
+        for key, value in cases.items():
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as temp:
+                archive = Path(temp) / "release.gcode.3mf"
+                self.copy_p1s(archive)
+                with zipfile.ZipFile(archive) as source:
+                    root = ET.fromstring(source.read("Metadata/slice_info.config"))
+                root.find("./plate/metadata[@key='weight']").set("value", "169.15")
+                root.find("./plate/metadata[@key='prediction']").set(
+                    "value", "22314"
+                )
+                metadata = root.find(f"./plate/metadata[@key='{key}']")
+                self.assertIsNotNone(metadata)
+                metadata.set("value", value)
+                rewrite_zip(
+                    archive,
+                    replacements={
+                        "Metadata/slice_info.config": ET.tostring(
+                            root, encoding="utf-8", xml_declaration=True
+                        )
+                    },
+                )
+
+                with zipfile.ZipFile(archive) as candidate:
+                    with self.assertRaisesRegex(ValidationError, key):
+                        _validate_p1s_slice(candidate)
 
     def test_p1s_rejects_support_toolpaths_even_with_matching_checksum(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
