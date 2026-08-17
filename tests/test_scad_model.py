@@ -259,9 +259,9 @@ class OpenScadRenderTests(unittest.TestCase):
                 self.assert_probe_does_not_intersect(
                     main_output,
                     "union() {"
-                    f" translate([{bolt_x}, 0, -27.48]) cylinder(h=4.96, r=10/sqrt(3), $fn=6);"
+                    f" translate([{bolt_x}, 0, -27.48]) cylinder(h=5.96, r=10/sqrt(3), $fn=6);"
                     f" translate([{bolt_x - 10 / 3 ** 0.5}, -12.98, -27.48])"
-                    f" cube([{20 / 3 ** 0.5}, 12.96, 4.96]);"
+                    f" cube([{20 / 3 ** 0.5}, 12.96, 5.96]);"
                     " }",
                     "standard M6 nut cannot occupy or enter the captive pocket",
                 )

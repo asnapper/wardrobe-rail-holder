@@ -9,7 +9,7 @@ removable lower cap.
 ## Hardware for one bracket
 
 - 2 × M6 × 12 mm button-head socket screws
-- 2 × standard M6 hex nuts (10 mm nominal across flats, 5 mm thick)
+- 2 × standard M6 hex nuts (10 mm nominal across flats, 6 mm thick)
 - 2 × 4 mm countersunk ceiling screws
 - Ceiling anchors appropriate for the ceiling construction and intended load
 

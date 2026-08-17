@@ -42,12 +42,12 @@ clamp_bolt_head_diameter = 11;   // clearance envelope for a 10.5 mm button head
 clamp_bolt_head_height = 3.6;    // clearance envelope for a 3.3 mm button head
 bolt_lug_radius = 12;
 clamp_nut_across_flats = 10;
-clamp_nut_thickness = 5;
+clamp_nut_thickness = 6;
 nut_clearance = 0.3;
 cap_bolt_seat_thickness = 2.5;
 nut_floor_thickness = 2.5;
 nut_roof_thickness = 6;
-minimum_bolt_projection = 0.8;
+minimum_bolt_projection = 0;     // M6 x 12 reaches 0.1 mm beyond the 6.3 mm pocket
 print_support_angle = 30;       // maximum boss overhang from vertical
 
 $fn = 64;

@@ -21,6 +21,13 @@ boss support adjust through the existing derived dimensions, raising the
 pocket roof by exactly 1 mm without reducing the 2.5 mm nut floor or 6 mm nut
 roof.
 
+The M6 x 12 mm clamp screws remain unchanged at the user's request. With the
+taller pocket, a nominal screw reaches 0.1 mm beyond the pocket top and 0.4 mm
+beyond a 6 mm nut seated on the pocket floor. Recalibrate
+`minimum_bolt_projection` from 0.8 mm to 0 mm so the model requires the screw
+to reach the full pocket height without claiming a protrusion margin that the
+selected hardware cannot provide.
+
 ## Model and Hardware Contract
 
 - Default hardware uses two M6 hex nuts measuring 10 mm nominal across flats
@@ -29,16 +36,18 @@ roof.
   clearance.
 - The existing M6 x 12 mm button-head screws, pocket loading direction, bolt
   axis, and rail geometry remain unchanged.
-- Existing structural and bolt-engagement assertions must still pass with the
-  raised pocket roof.
+- The bolt-length assertion requires the screw to reach the full pocket height;
+  it does not require additional projection beyond the 6.3 mm pocket.
+- Existing structural assertions must still pass with the raised pocket roof.
 
 ## Tests
 
 Update the real-geometry hardware fit test before changing the model so its
 6 mm nut probe fails against the current 5.3 mm pocket. After the parameter
 change, the same probe must occupy and enter each pocket without intersecting
-the main body. Existing rendering, topology, envelope, support, bolt length,
-and invalid-parameter tests remain regression coverage.
+the main body. The existing short-bolt rejection must still prove that an
+undersized screw cannot reach the full pocket. Existing rendering, topology,
+envelope, support, and invalid-parameter tests remain regression coverage.
 
 Run the complete unit-test suite after rebuilding release artifacts. Validate
 the neutral models and sliced P1S project with the repository's release
@@ -59,6 +68,7 @@ reflected in their validators and documentation rather than waived.
 ## Non-Goals
 
 - Increasing clearance beyond the existing 0.3 mm allowance.
-- Changing nut width, bolt dimensions, rail fit, or bracket exterior geometry.
+- Changing nut width, the selected M6 x 12 mm bolts, rail fit, or bracket
+  exterior geometry.
 - Claiming physical fit or load validation before the revised model is printed
   and tested.

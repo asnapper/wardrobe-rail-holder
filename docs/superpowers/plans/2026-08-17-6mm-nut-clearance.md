@@ -13,6 +13,7 @@
 - Default nut hardware is 10 mm nominal across flats and 6 mm high.
 - Preserve `nut_clearance = 0.3`, producing `nut_pocket_height = 6.3` mm.
 - Preserve the pocket bottom, 2.5 mm bearing floor, 6 mm roof, loading direction, bolt axis, M6 x 12 mm button-head screws, and rail geometry.
+- Recalibrate `minimum_bolt_projection` from 0.8 mm to 0 mm: the 12 mm bolt must reach the full 6.3 mm pocket, with nominal geometry extending 0.1 mm beyond the pocket and 0.4 mm beyond a seated 6 mm nut.
 - Do not claim physical fit or load validation; the revised part remains unprinted and unverified.
 - Regenerate all five neutral model releases, the 1200 x 900 README render, and the two-bracket P1S sliced project.
 - Keep the existing external mesh-envelope contracts unless regenerated geometry proves an actual outer-bound change.
@@ -38,7 +39,7 @@
 
 **Interfaces:**
 - Consumes: `OpenScadRenderTests.render(output_mode, *definitions)` and `assert_probe_does_not_intersect(model_output, probe_body, message)`.
-- Produces: default `clamp_nut_thickness = 6`, derived `nut_pocket_height = 6.3`, and a hardware-fit regression using a 5.96 mm geometric probe inset 0.02 mm from the nominal 6 mm faces to avoid coincident-surface ambiguity.
+- Produces: default `clamp_nut_thickness = 6`, derived `nut_pocket_height = 6.3`, `minimum_bolt_projection = 0`, and a hardware-fit regression using a 5.96 mm geometric probe inset 0.02 mm from the nominal 6 mm faces to avoid coincident-surface ambiguity.
 
 - [ ] **Step 1: Change the regression probe to represent a 6 mm-high nut**
 
@@ -68,12 +69,18 @@ Change the public hardware dimension without changing the clearance formula:
 clamp_nut_across_flats = 10;
 clamp_nut_thickness = 6;
 nut_clearance = 0.3;
+minimum_bolt_projection = 0;
 ```
 
-Leave this derived expression unchanged:
+Leave these derived expressions and the full-pocket bolt-length assertion
+unchanged:
 
 ```scad
 nut_pocket_height = clamp_nut_thickness + nut_clearance;
+assert(
+    bolt_tip_z - nut_pocket_top_z >= minimum_bolt_projection,
+    "clamp bolt is too short to engage the captive nut"
+);
 ```
 
 - [ ] **Step 4: Update the documented hardware contract**
@@ -273,4 +280,3 @@ git status --short
 ```
 
 Expected: no whitespace errors and no uncommitted changes. Review `git show --stat --oneline HEAD~3..HEAD` to confirm the implementation touched only the files listed in this plan.
-
