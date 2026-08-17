@@ -31,8 +31,8 @@ The P1S project was sliced with OrcaSlicer 2.4.2 for a P1S with a 0.4 mm
 nozzle, Textured PEI Plate, and Bambu PLA Basic. It contains four objects: two
 main bodies and two caps. Its embedded profile uses 0.20 mm layers, 5 walls, 6
 top and bottom layers, 40% gyroid infill, a 5 mm outer brim with a 0.1 mm gap,
-and no supports. OrcaSlicer reports 150 layers, 133.10 g of filament, and
-17,454 s (about 4 h 51 min) estimated print time.
+and no supports. OrcaSlicer reports 250 layers, 169.15 g of filament, and
+22,314 s (about 6 h 12 min) estimated print time.
 
 The headless P1S build is intended to reproduce the project settings and
 toolpaths; embedded thumbnails are not guaranteed. Review the selected filament
@@ -109,8 +109,9 @@ useful for CAD inspection rather than direct slicing.
 
 All principal dimensions are top-level parameters. The default rail socket is
 30.6 × 15.6 mm with a 7.3 mm radius, providing 0.3 mm nominal clearance on each
-side. Print a short fit sample or adjust `rail_clearance` if the printer or rail
-needs a different tolerance.
+side, and the top of the rail sits 30 mm below the ceiling-contact plane. Print
+a short fit sample or adjust `rail_clearance` if the printer or rail needs a
+different tolerance.
 
 ## Suggested PLA print settings
 
@@ -146,12 +147,13 @@ visible gap after tightening is normal.
 
 ## Safety and loading
 
-This M6 revision has **not yet been physically printed or verified** for fit,
-function, or load. A 20 kg static load is a design target only, not a validated
-capacity or safety claim. It is **not structurally certified**. Capacity depends
-on filament quality and age, print temperature, layer adhesion, bracket spacing,
-rail span, ambient heat, ceiling construction, screws, and anchors. PLA also
-creeps under sustained load.
+The previous 10 mm-ceiling-gap M6 revision was printed successfully. The current
+30 mm-ceiling-gap geometry has **not yet been physically or load verified**; the
+earlier print does not validate this taller revision. A 20 kg static load is a
+design target only, not a validated capacity or safety claim. It is **not
+structurally certified**. Capacity depends on filament quality and age, print
+temperature, layer adhesion, bracket spacing, rail span, ambient heat, ceiling
+construction, screws, and anchors. PLA also creeps under sustained load.
 
 Use multiple brackets, keep people clear during testing, and proof-load the
 installed rail gradually with a non-fragile load before hanging clothes. Inspect
